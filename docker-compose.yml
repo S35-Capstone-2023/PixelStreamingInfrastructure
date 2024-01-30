@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  signalling-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Uncomment the line below if your application listens on a port
+    ports:
+      - "8887:80"
+      - "8888:8888"
