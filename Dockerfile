@@ -1,5 +1,5 @@
 # Use the current Long Term Support (LTS) version of Node.js
-FROM node:lts
+FROM ubuntu:22.04
 # Copy the signalling server and frontend source code from the build context
 COPY /SignallingWebServer /SignallingWebServer
 COPY /Frontend /Frontend
@@ -32,5 +32,3 @@ RUN SignallingWebServer/platform_scripts/bash/setup.sh --build
 
 # Set the signalling server as the container's entrypoint
 ENTRYPOINT ["/SignallingWebServer/platform_scripts/bash/Start_WithTURN_SignallingServer.sh"]
-
-CMD [ "--HttpPort", "80" ]
