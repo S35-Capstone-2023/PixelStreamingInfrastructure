@@ -1,5 +1,8 @@
 # Use the current Long Term Support (LTS) version of Node.js
 FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y curl
+
 # Copy the signalling server and frontend source code from the build context
 COPY /SignallingWebServer /SignallingWebServer
 COPY /Frontend /Frontend
