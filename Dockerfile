@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y curl
 COPY /SignallingWebServer /SignallingWebServer
 COPY /Frontend /Frontend
 # Install the dependencies for the signalling server and build the frontend
-RUN ["/SignallingWebServer/platform_scripts/bash/setup.sh", "--build"]
+RUN SignallingWebServer/platform_scripts/bash/setup.sh --build
 
 # WORKDIR /SignallingWebServer
 # RUN npm install
