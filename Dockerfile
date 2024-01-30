@@ -31,4 +31,6 @@ RUN SignallingWebServer/platform_scripts/bash/setup.sh --build
 # EXPOSE 3479
 
 # Set the signalling server as the container's entrypoint
-ENTRYPOINT ["/SignallingWebServer/platform_scripts/bash/Start_SignallingServer.sh"]
+ENTRYPOINT ["/SignallingWebServer/platform_scripts/bash/Start_WithTURN_SignallingServer.sh"]
+
+CMD [ "--HttpPort", "80" ]
