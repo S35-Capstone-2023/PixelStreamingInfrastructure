@@ -5,6 +5,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
 const fs = require('fs');
 
+
 const pages = fs.readdirSync('./src', { withFileTypes: true })
 	.filter(item => !item.isDirectory())
 	.filter(item => path.parse(item.name).ext === '.html')
@@ -21,7 +22,8 @@ module.exports = {
           template: `./src/${page}.html`,
           filename: `${page}.html`,
           chunks: [page],
-    }), )),
+    })
+    )),
 
     module: {
       rules: [
@@ -71,5 +73,11 @@ module.exports = {
     	static: {
     		directory: path.join(__dirname, '../../../SignallingWebServer/Public'),
     	},
+    	//Start : AWS - allowed origin from AWS
+    	allowedHosts: [
+        '.amazonaws.com',
+        '.cloudfront.net'
+      ]
+      //End: AWS - allowed origin from AWS
     },
 }
