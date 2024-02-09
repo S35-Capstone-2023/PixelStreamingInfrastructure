@@ -5,7 +5,7 @@ import {
     Config,
     AllSettings,
     PixelStreaming
-} from '@epicgames-ps/lib-pixelstreamingfrontend-ue5.2';
+} from '@epicgames-ps/lib-pixelstreamingfrontend-ue5.3';
 
 export interface PixelStreamingWrapperProps {
     initialSettings?: Partial<AllSettings>;
@@ -19,7 +19,7 @@ export const PixelStreamingWrapper = ({
 
     // Pixel streaming library instance is stored into this state variable after initialization:
     const [pixelStreaming, setPixelStreaming] = useState<PixelStreaming>();
-    
+
     // A boolean state variable that determines if the Click to play overlay is shown:
     const [clickToPlayVisible, setClickToPlayVisible] = useState(false);
 
@@ -31,7 +31,7 @@ export const PixelStreamingWrapper = ({
             const streaming = new PixelStreaming(config, {
                 videoElementParent: videoParent.current
             });
-            
+
             // register a playStreamRejected handler to show Click to play overlay if needed:
             streaming.addEventListener('playStreamRejected', () => {
                 setClickToPlayVisible(true);
