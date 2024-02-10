@@ -1,5 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-var enableRedirectionLinks = true;
+
+//Start : AWS - expose matchmaker only as api endpoint
+var enableRedirectionLinks = false;
+//End : AWS - expose matchmaker only as api endpoint
 var enableRESTAPI = true;
 
 const defaultConfig = {
@@ -10,9 +13,7 @@ const defaultConfig = {
 	MatchmakerPort: 9999,
 
 	// Log to file
-	LogToFile: true,
-	
-	EnableWebserver: true,
+	LogToFile: true
 };
 
 // Similar to the Signaling Server (SS) code, load in a config.json file for the MM parameters
@@ -30,6 +31,14 @@ const http = require('http').Server(app);
 const fs = require('fs');
 const path = require('path');
 const logging = require('./modules/logging.js');
+//Start : AWS - Loaded aws sdk for iterfacing with dynamoDB and SSM paramater store
+var AWS = require('aws-sdk');
+const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
+// please change based on region
+AWS.config.update({region: config.AWSRegion});
+var ddb = new AWS.DynamoDB({ apiVersion: "2012-08-10" });
+//End : AWS - Loaded aws sdk for iterfacing with dynamoDB and SSM paramater store
+
 logging.RegisterConsoleLogger();
 
 if (config.LogToFile) {
@@ -38,7 +47,7 @@ if (config.LogToFile) {
 
 // A list of all the Cirrus server which are connected to the Matchmaker.
 var cirrusServers = new Map();
-
+var theSSMSecret=''
 //
 // Parse command line.
 //
@@ -88,27 +97,24 @@ if (config.UseHTTPS) {
 	});
 }
 
-let htmlDirectory = 'html/sample'
-if(config.EnableWebserver) {
-	// Setup folders
 
-	if (fs.existsSync('html/custom')) {
-		app.use(express.static(path.join(__dirname, '/html/custom')))
-		htmlDirectory = 'html/custom'
-	} else {
-		app.use(express.static(path.join(__dirname, '/html/sample')))
-	}
-}
+
 
 // No servers are available so send some simple JavaScript to the client to make
 // it retry after a short period of time.
 function sendRetryResponse(res) {
-	// find check if a custom template should be used or the sample one
-	let html = fs.readFileSync(`${htmlDirectory}/queue/queue.html`, { encoding: 'utf8' })
-	html = html.replace(/\$\{cirrusServers\.size\}/gm, cirrusServers.size)
-
-	res.setHeader('content-type', 'text/html')
-	res.send(html)
+	res.send(`All ${cirrusServers.size} Cirrus servers are in use. Retrying in <span id="countdown">3</span> seconds.
+	<script>
+		var countdown = document.getElementById("countdown").textContent;
+		setInterval(function() {
+			countdown--;
+			if (countdown == 0) {
+				window.location.reload(1);
+			} else {
+				document.getElementById("countdown").textContent = countdown;
+			}
+		}, 1000);
+	</script>`);
 }
 
 // Get a Cirrus server if there is one available which has no clients connected.
@@ -132,18 +138,64 @@ function getAvailableCirrusServer() {
 	console.log('WARNING: No empty Cirrus servers are available');
 	return undefined;
 }
+//Start : AWS - get client secret for validation from parameter store
+const getParameterInfo = async () => { 
+	const client = new SSMClient({ region: "ap-south-1" });
+	const input = { // GetParameterRequest
+		Name: "matchmakerclientsecret" // required
+	};
+	const paramSSMcommand = new GetParameterCommand(input);
+	const paramSSMresponse= await client.send(paramSSMcommand);
+	theSSMSecret=paramSSMresponse.Parameter.Value
+}
+//End : AWS - get client secret for validation from parameter store
+
+//Start : AWS -  Get Query String from DynamoDB for Signalling Instance
+const getQueryStringFromDDB = async (instanceId) => {     
+    	var qs=''
+    	console.log(instanceId)
+        var params = {
+        	FilterExpression: "InstanceID = :t",
+			ExpressionAttributeValues: {
+    			":t": {S: instanceId}
+			},
+			ProjectionExpression: "QueryString",
+            TableName: "instanceMapping"
+        };
+        
+        const data =await ddb.scan(params).promise()
+    	qs=data.Items[0].QueryString.S
+		console.log("Success", qs);
+		return qs
+}
+//End : AWS -  Get Query String from DynamoDB for Signalling Instance
 
 if(enableRESTAPI) {
 	// Handle REST signalling server only request.
 	app.options('/signallingserver', cors())
-	app.get('/signallingserver', cors(),  (req, res) => {
-		cirrusServer = getAvailableCirrusServer();
-		if (cirrusServer != undefined) {
-			res.json({ signallingServer: `${cirrusServer.address}:${cirrusServer.port}`});
-			console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
-		} else {
-			res.json({ signallingServer: '', error: 'No signalling servers available'});
+	app.get('/signallingserver', cors(),  async(req, res) => {
+		//Start : AWS - check if a valid secret was provided in header to authenticate calls
+		console.log(config.AWSRegion)
+		await getParameterInfo()
+		if(req.header("clientsecret") != undefined && req.header("clientsecret")==theSSMSecret)
+		{
+			cirrusServer = getAvailableCirrusServer();
+			if (cirrusServer != undefined) {
+				var qs=await getQueryStringFromDDB(cirrusServer.instanceID);
+				console.log("Received", qs);
+				// The original function used to send the instance ip/port to allow connection to Signalling
+				// We have modified the logic to send a query string which allows to connect to Signalling
+				// via an external load balancer. The query string is in dynamoDB
+				res.json({ signallingServer: qs});
+				console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
+			} else {
+				res.status(400).send('No signalling servers available');
+			}
+		}else
+		{
+			res.status(401).send('Unauthorized');
 		}
+		//End : AWS - check if a valid secret was provided in header to authenticate calls
 	});
 }
 
@@ -201,7 +253,8 @@ const matchmaker = net.createServer((connection) => {
 				address: message.address,
 				port: message.port,
 				numConnectedClients: 0,
-				lastPingReceived: Date.now()
+				lastPingReceived: Date.now(),
+				instanceID:message.instanceId
 			};
 			cirrusServer.ready = message.ready === true;
 

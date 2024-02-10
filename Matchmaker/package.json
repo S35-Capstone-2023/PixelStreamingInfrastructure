@@ -12,6 +12,8 @@
       "start:default": "if [ `id -u` -eq 0 ]\nthen\n export process=\"./platform_scripts/bash/node/bin/node matchmaker.js\"\nelse\n export process=\"sudo ./platform_scripts/bash/node/bin/node matchmaker.js\"\nfi\n$process "
   },
   "dependencies": {
+    "@aws-sdk/client-ssm": "^3.362.0",
+    "aws-sdk": "^2.1408.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "socket.io": "4.6.0",
