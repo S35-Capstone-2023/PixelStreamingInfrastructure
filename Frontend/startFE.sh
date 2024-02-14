@@ -34,3 +34,5 @@ npm i
 npm link ../../library ../../ui-library
 
 npm run serve
+
+fi
