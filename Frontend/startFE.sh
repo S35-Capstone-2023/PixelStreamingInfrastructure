@@ -13,22 +13,24 @@ if ! command -v node >/dev/null 2>&1; then
 
     echo "Node v20.x installed."
 
-cd /usr/local/PixelStreamingInfrastructure/Frontend
+else
 
-cd ./library
+    cd /usr/local/PixelStreamingInfrastructure/Frontend
 
-npm i
-npm run build-dev
+    cd ./library
 
-cd ../ui-library
-npm i
-npm link ../library
-npm run build-dev
+    npm i
+    npm run build-dev
 
-cd ../implementations/react
-npm i
-npm link ../../library ../../ui-library
+    cd ../ui-library
+    npm i
+    npm link ../library
+    npm run build-dev
 
-npm run serve
+    cd ../implementations/react
+    npm i
+    npm link ../../library ../../ui-library
+
+    npm run serve
 
 fi
