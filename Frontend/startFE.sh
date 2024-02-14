@@ -15,7 +15,7 @@ if ! command -v node >/dev/null 2>&1; then
 
 cd /usr/local/PixelStreamingInfrastructure/Frontend
 
-cd /library
+cd ./library
 
 npm i
 npm run build-dev
