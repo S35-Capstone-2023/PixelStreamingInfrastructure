@@ -140,7 +140,7 @@ function getAvailableCirrusServer() {
 }
 //Start : AWS - get client secret for validation from parameter store
 const getParameterInfo = async () => { 
-	const client = new SSMClient({ region: "ap-south-1" });
+	const client = new SSMClient({ region: "ap-southeast-1" });
 	const input = { // GetParameterRequest
 		Name: "matchmakerclientsecret" // required
 	};
