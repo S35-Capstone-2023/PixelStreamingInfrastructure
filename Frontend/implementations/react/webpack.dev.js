@@ -27,7 +27,7 @@ module.exports = merge(common, {
             // Refer cloudformation output : Web socket endpoint for api server (APIGatewayWSAPI)
             'process.env.api_ws': JSON.stringify('wss://8s8shun4dj.execute-api.ap-southeast-1.amazonaws.com/production?tokenId=abcd'),
             // Refer cloudformation output : Web socket endpoint for signalling server (SignallingServerWSAPI)
-            'process.env.sig_ws': JSON.stringify('ws://signalling-1977031133.ap-southeast-1.elb.amazonaws.com?'),
+            'process.env.sig_ws': JSON.stringify('wss://signalling-1977031133.ap-southeast-1.elb.amazonaws.com?'),
             // No need to change this. If you modify, make sure you also update clientSecret environment variable for requestSession lambda
             'process.env.sec_token': JSON.stringify(''),
             
