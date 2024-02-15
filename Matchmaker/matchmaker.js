@@ -171,6 +171,10 @@ const getQueryStringFromDDB = async (instanceId) => {
 //End : AWS -  Get Query String from DynamoDB for Signalling Instance
 
 if(enableRESTAPI) {
+	// Handle healthcheck
+	app.get('/healthcheck', cors(), (req, res) => {
+		res.json({ status: 'ok' });
+	});
 	// Handle REST signalling server only request.
 	app.options('/signallingserver', cors())
 	app.get('/signallingserver', cors(),  async(req, res) => {
