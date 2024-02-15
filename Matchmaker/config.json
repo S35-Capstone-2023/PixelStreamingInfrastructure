@@ -3,5 +3,5 @@
 	"UseHTTPS": false,
 	"MatchmakerPort": 9999,
 	"LogToFile": true,
-	"EnableWebserver": true
+	"AWSRegion": "ap-southeast-1"
 }
