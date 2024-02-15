@@ -55,10 +55,7 @@ export default class Streaming extends Component<Props, State> {
                 // need to add error handling
                 var parsedMsg = e.data.split(':')[1].split('"')[1];
                 this.setState({ serverMessage: signallingServer + parsedMsg });
-                console.log(
-                    'check here' +
-                        { serverMessage: signallingServer + parsedMsg }
-                );
+                console.log('check here: ', signallingServer + parsedMsg);
             } else {
                 console.log('Waiting for session');
             }
