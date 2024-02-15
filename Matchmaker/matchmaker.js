@@ -172,7 +172,7 @@ const getQueryStringFromDDB = async (instanceId) => {
 
 if(enableRESTAPI) {
 	// Handle healthcheck
-	app.get('/healthcheck', cors(), (req, res) => {
+	app.get('/', cors(), (req, res) => {
 		res.json({ status: 'ok' });
 	});
 	// Handle REST signalling server only request.
