@@ -34,7 +34,10 @@ const defaultConfig = {
 	StreamerPort: 8888,
 	SFUPort: 8889,
 	MaxPlayerCount: -1,
-	DisableSSLCert: true
+	DisableSSLCert: true,
+	// Start : AWS - InstanceID of signalling server. This is needed to get the query string later.
+	AWSInstanceID:''
+	// End : AWS - InstanceID of signalling server. This is needed to get the query string later
 };
 
 const argv = require('yargs').argv;
@@ -106,6 +109,7 @@ var maxPlayerCount = -1;
 var gameSessionId;
 var userSessionId;
 var serverPublicIp;
+var AWSInstanceID;
 
 // `clientConfig` is send to Streamer and Players
 // Example of STUN server setting
@@ -118,6 +122,11 @@ try {
 	if (typeof config.PublicIp != 'undefined') {
 		serverPublicIp = config.PublicIp.toString();
 	}
+	// Start : AWS - InstanceID of signalling server
+	if (typeof config.AWSInstanceID != 'undefined') {
+		AWSInstanceID = config.AWSInstanceID.toString();
+	}
+	// End : AWS - InstanceID of signalling server
 
 	if (typeof config.HttpPort != 'undefined') {
 		httpPort = config.HttpPort;
@@ -284,87 +293,18 @@ if (config.UseHTTPS) {
 	});
 }
 
-console.logColor(logging.Cyan, `Running Cirrus - The Pixel Streaming reference implementation signalling server for Unreal Engine 5.3.`);
+console.logColor(logging.Cyan, `Running Cirrus - The Pixel Streaming reference implementation signalling server for Unreal Engine 5.2.`);
 
 let nextPlayerId = 1;
 
-const StreamerType = { Regular: 0, SFU: 1 };
-
-class Streamer {
-	constructor(initialId, ws, type) {
-		this.id = initialId;
-		this.ws = ws;
-		this.type = type;
-		this.idCommitted = false;
-	}
-
-	// registers this streamers id
-	commitId(id) {
-		this.id = id;
-		this.idCommitted = true;
-	}
-
-	// returns true if we have a valid id
-	isIdCommitted() {
-		return this.idCommitted;
-	}
-
-	// links this streamer to a subscribed SFU player (player component of an SFU)
-	addSFUPlayer(sfuPlayerId) {
-		if (!!this.SFUPlayerId && this.SFUPlayerId != sfuPlayerId) {
-			console.error(`Streamer ${this.id} already has an SFU ${this.SFUPlayerId}. Trying to add ${sfuPlayerId} as SFU.`);
-			return;
-		}
-		this.SFUPlayerId = sfuPlayerId;
-	}
-
-	// removes the previously subscribed SFU player
-	removeSFUPlayer() {
-		delete this.SFUPlayerId;
-	}
-
-	// gets the player id of the subscribed SFU if any
-	getSFUPlayerId() {
-		return this.SFUPlayerId;
-	}
-
-	// returns true if this streamer is forwarding another streamer
-	isSFU() {
-		return this.type == StreamerType.SFU;
-	}
-
-	// links this streamer to a player, used for SFU connections since they have both components
-	setSFUPlayerComponent(playerComponent) {
-		if (!this.isSFU()) {
-			console.error(`Trying to add an SFU player component ${playerComponent.id} to streamer ${this.id} but it is not an SFU type.`);
-			return;
-		}
-		this.sfuPlayerComponent = playerComponent;
-	}
-
-	// gets the player component for this sfu
-	getSFUPlayerComponent() {
-		if (!this.isSFU()) {
-			console.error(`Trying to get an SFU player component from streamer ${this.id} but it is not an SFU type.`);
-			return null;
-		}
-		return this.sfuPlayerComponent;
-	}
-}
-
 const PlayerType = { Regular: 0, SFU: 1 };
-const WhoSendsOffer = { Streamer: 0, Browser: 1 };
 
 class Player {
-	constructor(id, ws, type, whoSendsOffer) {
+	constructor(id, ws, type, browserSendOffer) {
 		this.id = id;
 		this.ws = ws;
 		this.type = type;
-		this.whoSendsOffer = whoSendsOffer;
-	}
-
-	isSFU() {
-		return this.type == PlayerType.SFU;
+		this.browserSendOffer = browserSendOffer;
 	}
 
 	subscribe(streamerId) {
@@ -373,25 +313,13 @@ class Player {
 			return;
 		}
 		this.streamerId = streamerId;
-		if (this.type == PlayerType.SFU) {
-			let streamer = streamers.get(this.streamerId);
-			streamer.addSFUPlayer(this.id);
-		}
-		const msg = { type: 'playerConnected', playerId: this.id, dataChannel: true, sfu: this.type == PlayerType.SFU, sendOffer: this.whoSendsOffer == WhoSendsOffer.Streamer };
+		const msg = { type: 'playerConnected', playerId: this.id, dataChannel: true, sfu: this.type == PlayerType.SFU, sendOffer: !this.browserSendOffer };
 		logOutgoing(this.streamerId, msg);
 		this.sendFrom(msg);
 	}
 
 	unsubscribe() {
 		if (this.streamerId && streamers.has(this.streamerId)) {
-			if (this.type == PlayerType.SFU) {
-				let streamer = streamers.get(this.streamerId);
-				if (streamer.getSFUPlayerId() != this.id) {
-					console.error(`Trying to unsibscribe SFU player ${this.id} from streamer ${streamer.id} but the current SFUId does not match (${streamer.getSFUPlayerId()}).`)
-				} else {
-					streamer.removeSFUPlayer();
-				}
-			}
 			const msg = { type: 'playerDisconnected', playerId: this.id };
 			logOutgoing(this.streamerId, msg);
 			this.sendFrom(msg);
@@ -429,41 +357,20 @@ class Player {
 		const msgString = JSON.stringify(message);
 		this.ws.send(msgString);
 	}
-
-	setSFUStreamerComponent(streamerComponent) {
-		if (!this.isSFU()) {
-			console.error(`Trying to add an SFU streamer component ${streamerComponent.id} to player ${this.id} but it is not an SFU type.`);
-			return;
-		}
-		this.sfuStreamerComponent = streamerComponent;
-	}
-
-	getSFUStreamerComponent() {
-		if (!this.isSFU()) {
-			console.error(`Trying to get an SFU streamer component from player ${this.id} but it is not an SFU type.`);
-			return null;
-		}
-		return this.sfuStreamerComponent;
-	}
 };
 
-let streamers = new Map();		// streamerId <-> streamer
-let players = new Map(); 		// playerId <-> player/peer/viewer
-const LegacyStreamerPrefix = "__LEGACY_STREAMER__"; // old streamers that dont know how to ID will be assigned this id prefix.
-const LegacySFUPrefix = "__LEGACY_SFU__"; 					// same as streamer version but for SFUs
-const streamerIdTimeoutSecs = 5;
+let streamers = new Map();		// streamerId <-> streamer socket
+let players = new Map(); 		// playerId <-> player, where player is either a web-browser or a native webrtc player
+const SFUPlayerId = "SFU";
+const LegacyStreamerId = "__LEGACY__"; // old streamers that dont know how to ID will be assigned this id.
 
-// gets the SFU subscribed to this streamer if any.
-function getSFUForStreamer(streamerId) {
-	if (!streamers.has(streamerId)) {
-		return null;
-	}
-	const streamer = streamers.get(streamerId);
-	const sfuPlayerId = streamer.getSFUPlayerId();
-	if (!sfuPlayerId) {
-		return null;
-	}
-	return players.get(sfuPlayerId);
+function sfuIsConnected() {
+	const sfuPlayer = players.get(SFUPlayerId);
+	return sfuPlayer && sfuPlayer.ws && sfuPlayer.ws.readyState == 1;
+}
+
+function getSFU() {
+	return players.get(SFUPlayerId);
 }
 
 function logIncoming(sourceName, msg) {
@@ -503,91 +410,30 @@ function getPlayerIdFromMessage(msg) {
 	return sanitizePlayerId(msg.playerId);
 }
 
-let uniqueLegacyStreamerPostfix = 0;
-function getUniqueLegacyStreamerId() {
-	const finalId = LegacyStreamerPrefix + uniqueLegacyStreamerPostfix;
-	++uniqueLegacyStreamerPostfix;
-	return finalId;
-}
-
-let uniqueLegacySFUPostfix = 0;
-function getUniqueLegacySFUId() {
-	const finalId = LegacySFUPrefix + uniqueLegacySFUPostfix;
-	++uniqueLegacySFUPostfix;
-	return finalId;
-}
-
-function requestStreamerId(streamer) {
-	// first we ask the streamer to id itself.
-	// if it doesnt reply within a time limit we assume it's an older streamer
-	// and assign it an id.
-
-	// request id
-	const msg = { type: "identify" };
-	logOutgoing(streamer.id, msg);
-	streamer.ws.send(JSON.stringify(msg));
-
-	streamer.idTimer = setTimeout(function() {
-		// streamer did not respond in time. give it a legacy id.
-		const newLegacyId = getUniqueLegacyId();
-		if (newLegacyId.length == 0) {
-			const error = `Ran out of legacy ids.`;
-			console.error(error);
-			streamer.ws.close(1008, error);
-		} else {
-			registerStreamer(newLegacyId, streamer);
-		}
-
-	}, streamerIdTimeoutSecs * 1000);
-}
-
-function sanitizeStreamerId(id) {
-	let maxPostfix = -1;
-	for (let [streamerId, streamer] of streamers) {
-		const idMatchRegex = /^(.*?)(\d*)$/;
-		const [, baseId, postfix] = streamerId.match(idMatchRegex);
-		// if the id is numeric then base id will be empty and we need to compare with the postfix
-		if ((baseId != '' && baseId != id) || (baseId == '' && postfix != id)) {
-			continue;
-		}
-		const numPostfix = Number(postfix);
-		if (numPostfix > maxPostfix) {
-			maxPostfix = numPostfix
-		}
-	}
-	if (maxPostfix >= 0) {
-		return id + (maxPostfix + 1);
-	}
-	return id;
-}
-
 function registerStreamer(id, streamer) {
-	// make sure the id is unique
-	const uniqueId = sanitizeStreamerId(id);
-	streamer.commitId(uniqueId);
-	if (!!streamer.idTimer) {
-		clearTimeout(streamer.idTimer);
-		delete streamer.idTimer;
-	}
-	streamers.set(uniqueId, streamer);
-	console.logColor(logging.Green, `Registered new streamer: ${streamer.id}`);
+	streamer.id = id;
+	streamers.set(streamer.id, streamer);
 }
 
 function onStreamerDisconnected(streamer) {
-	if (!streamer.id || !streamers.has(streamer.id)) {
+	if (!streamer.id) {
 		return;
 	}
 
-	sendStreamerDisconnectedToMatchmaker();
-	let sfuPlayer = getSFUForStreamer(streamer.id);
-	if (sfuPlayer) {
-		const msg = { type: "streamerDisconnected" };
-		logOutgoing(sfuPlayer.id, msg);
-		sfuPlayer.sendTo(msg);
-		disconnectAllPlayers(sfuPlayer.id);
+	if (!streamers.has(streamer.id)) {
+		console.error(`Disconnecting streamer ${streamer.id} does not exist.`);
+	} else {
+		sendStreamerDisconnectedToMatchmaker();
+		let sfuPlayer = getSFU();
+		if (sfuPlayer) {
+			const msg = { type: "streamerDisconnected" };
+			logOutgoing(sfuPlayer.id, msg);
+			sfuPlayer.sendTo(msg);
+			disconnectAllPlayers(sfuPlayer.id);
+		}
+		disconnectAllPlayers(streamer.id);
+		streamers.delete(streamer.id);
 	}
-	disconnectAllPlayers(streamer.id);
-	streamers.delete(streamer.id);
 }
 
 function onStreamerMessageId(streamer, msg) {
@@ -595,6 +441,15 @@ function onStreamerMessageId(streamer, msg) {
 
 	let streamerId = msg.id;
 	registerStreamer(streamerId, streamer);
+
+	// subscribe any sfu to the latest connected streamer
+	const sfuPlayer = getSFU();
+	if (sfuPlayer) {
+		sfuPlayer.subscribe(streamer.id);
+	}
+
+	// if any streamer id's assume the legacy streamer is not needed.
+	streamers.delete(LegacyStreamerId);
 }
 
 function onStreamerMessagePing(streamer, msg) {
@@ -615,7 +470,7 @@ function onStreamerMessageDisconnectPlayer(streamer, msg) {
 }
 
 function onStreamerMessageLayerPreference(streamer, msg) {
-	let sfuPlayer = getSFUForStreamer(streamer.id);
+	let sfuPlayer = getSFU();
 	if (sfuPlayer) {
 		logOutgoing(sfuPlayer.id, msg);
 		sfuPlayer.sendTo(msg);
@@ -630,7 +485,7 @@ function forwardStreamerMessageToPlayer(streamer, msg) {
 		logForward(streamer.id, playerId, msg);
 		player.sendTo(msg);
 	} else {
-		console.warn("No playerId specified, cannot forward message: %s", msg);
+		console.warning("No playerId specified, cannot forward message: %s", msg);
 	}
 }
 
@@ -649,8 +504,7 @@ streamerServer.on('connection', function (ws, req) {
 	console.logColor(logging.Green, `Streamer connected: ${req.connection.remoteAddress}`);
 	sendStreamerConnectedToMatchmaker();
 
-	const temporaryId = req.connection.remoteAddress;
-	let streamer = new Streamer(temporaryId, ws, StreamerType.Regular);
+	let streamer = { ws: ws };
 
 	ws.on('message', (msgRaw) => {
 		var msg;
@@ -690,124 +544,69 @@ streamerServer.on('connection', function (ws, req) {
 	});
 
 	ws.send(JSON.stringify(clientConfig));
-	requestStreamerId(streamer);
+
+	// request id
+	const msg = { type: "identify" };
+	logOutgoing("unknown", msg);
+	ws.send(JSON.stringify(msg));
+
+	registerStreamer(LegacyStreamerId, streamer);
 });
 
-function forwardSFUMessageToPlayer(sfuPlayer, msg) {
+function forwardSFUMessageToPlayer(msg) {
 	const playerId = getPlayerIdFromMessage(msg);
 	const player = players.get(playerId);
 	if (player) {
-		logForward(sfuPlayer.getSFUStreamerComponent().id, playerId, msg);
+		logForward(SFUPlayerId, playerId, msg);
 		player.sendTo(msg);
 	}
 }
 
-function forwardSFUMessageToStreamer(sfuPlayer, msg) {
-	logForward(sfuPlayer.getSFUStreamerComponent().id, sfuPlayer.streamerId, msg);
-	msg.sfuId = sfuPlayer.id;
-	sfuPlayer.sendFrom(msg);
+function forwardSFUMessageToStreamer(msg) {
+	const sfuPlayer = getSFU();
+	if (sfuPlayer) {
+		logForward(SFUPlayerId, sfuPlayer.streamerId, msg);
+		msg.sfuId = SFUPlayerId;
+		sfuPlayer.sendFrom(msg);
+	}
 }
 
-function onPeerDataChannelsSFUMessage(sfuPlayer, msg) {
+function onPeerDataChannelsSFUMessage(msg) {
 	// sfu is telling a peer what stream id to use for a data channel
 	const playerId = getPlayerIdFromMessage(msg);
 	const player = players.get(playerId);
 	if (player) {
-		logForward(sfuPlayer.getSFUStreamerComponent().id, playerId, msg);
+		logForward(SFUPlayerId, playerId, msg);
 		player.sendTo(msg);
 		player.datachannel = true;
 	}
 }
 
-// basically a duplicate of the streamer id request but this one does not register the streamer
-function requestSFUStreamerId(sfuPlayer) {
-	// request id
-	const msg = { type: "identify" };
-	const sfuStreamerComponent = sfuPlayer.getSFUStreamerComponent();
-	logOutgoing(sfuStreamerComponent.id, msg);
-	sfuStreamerComponent.ws.send(JSON.stringify(msg));
-
-	sfuStreamerComponent.idTimer = setTimeout(function() {
-		// streamer did not respond in time. give it a legacy id.
-		const newLegacyId = getUniqueSFUId();
-		if (newLegacyId.length == 0) {
-			const error = `Ran out of legacy ids.`;
-			console.error(error);
-			sfuPlayer.ws.close(1008, error);
-		} else {
-			sfuStreamerComponent.id = newLegacyId;
-		}
-	}, streamerIdTimeoutSecs * 1000);
-}
-
-function onSFUMessageId(sfuPlayer, msg) {
-	const sfuStreamerComponent = sfuPlayer.getSFUStreamerComponent();
-	logIncoming(sfuStreamerComponent.id, msg);
-	sfuStreamerComponent.id = msg.id;
-
-	if (!!sfuStreamerComponent.idTimer) {
-		clearTimeout(sfuStreamerComponent.idTimer);
-		delete sfuStreamerComponent.idTimer;
-	}
-}
-
-function onSFUMessageStartStreaming(sfuPlayer, msg) {
-	const sfuStreamerComponent = sfuPlayer.getSFUStreamerComponent();
-	logIncoming(sfuStreamerComponent.id, msg);
-	if (streamers.has(sfuStreamerComponent.id)) {
-		console.error(`SFU ${sfuStreamerComponent.id} is already registered as a streamer and streaming.`)
-		return;
-	}
-
-	registerStreamer(sfuStreamerComponent.id, sfuStreamerComponent);
-}
-
-function onSFUMessageStopStreaming(sfuPlayer, msg) {
-	const sfuStreamerComponent = sfuPlayer.getSFUStreamerComponent();
-	logIncoming(sfuStreamerComponent.id, msg);
-if (!streamers.has(sfuStreamerComponent.id)) {
-		console.error(`SFU ${sfuStreamerComponent.id} is not registered as a streamer or streaming.`)
-		return;
-	}
-
-	onStreamerDisconnected(sfuStreamerComponent);
-}
-
-function onSFUDisconnected(sfuPlayer) {
+function onSFUDisconnected() {
 	console.log("disconnecting SFU from streamer");
-	disconnectAllPlayers(sfuPlayer.id);
-	onStreamerDisconnected(sfuPlayer.getSFUStreamerComponent());
-	sfuPlayer.unsubscribe();
-	sfuPlayer.ws.close(4000, "SFU Disconnected");
-	players.delete(sfuPlayer.id);
-	streamers.delete(sfuPlayer.id);
+	disconnectAllPlayers(SFUPlayerId);
+	const sfuPlayer = getSFU();
+	if (sfuPlayer) {
+		sfuPlayer.unsubscribe();
+		sfuPlayer.ws.close(4000, "SFU Disconnected");
+	}
+	players.delete(SFUPlayerId);
+	streamers.delete(SFUPlayerId);
 }
 
-sfuMessageHandlers.set('listStreamers', onPlayerMessageListStreamers);
-sfuMessageHandlers.set('subscribe', onPlayerMessageSubscribe);
-sfuMessageHandlers.set('unsubscribe', onPlayerMessageUnsubscribe);
 sfuMessageHandlers.set('offer', forwardSFUMessageToPlayer);
 sfuMessageHandlers.set('answer', forwardSFUMessageToStreamer);
 sfuMessageHandlers.set('streamerDataChannels', forwardSFUMessageToStreamer);
 sfuMessageHandlers.set('peerDataChannels', onPeerDataChannelsSFUMessage);
-sfuMessageHandlers.set('endpointId', onSFUMessageId);
-sfuMessageHandlers.set('startStreaming', onSFUMessageStartStreaming);
-sfuMessageHandlers.set('stopStreaming', onSFUMessageStopStreaming);
 
 console.logColor(logging.Green, `WebSocket listening for SFU connections on :${sfuPort}`);
 let sfuServer = new WebSocket.Server({ port: sfuPort });
 sfuServer.on('connection', function (ws, req) {
-
-	let playerId = sanitizePlayerId(nextPlayerId++);
-	console.logColor(logging.Green, `SFU (${req.connection.remoteAddress}) connected `);
-
-	let streamerComponent = new Streamer(req.connection.remoteAddress, ws, StreamerType.SFU);
-	let playerComponent = new Player(playerId, ws, PlayerType.SFU, WhoSendsOffer.Streamer);
-
-	streamerComponent.setSFUPlayerComponent(playerComponent);
-	playerComponent.setSFUStreamerComponent(streamerComponent);
-
-	players.set(playerId, playerComponent);
+	// reject if we already have an sfu
+	if (sfuIsConnected()) {
+		ws.close(1013, 'Already have an SFU');
+		return;
+	}
 
 	ws.on('message', (msgRaw) => {
 		var msg;
@@ -819,33 +618,26 @@ sfuServer.on('connection', function (ws, req) {
 			return;
 		}
 
-		let sfuPlayer = players.get(playerId);
-		if (!sfuPlayer) {
-			console.error(`Received a message from an SFU not in the player list ${playerId}`);
-			ws.close(1001, 'Broken');
-			return;
-		}
-
 		let handler = sfuMessageHandlers.get(msg.type);
 		if (!handler || (typeof handler != 'function')) {
 			if (config.LogVerbose) {
-				console.logColor(logging.White, "\x1b[37m-> %s\x1b[34m: %s", sfuPlayer.id, msgRaw);
+				console.logColor(logging.White, "\x1b[37m-> %s\x1b[34m: %s", SFUPlayerId, msgRaw);
 			}
 			console.error(`unsupported SFU message type: ${msg.type}`);
 			ws.close(1008, 'Unsupported message type');
 			return;
 		}
-		handler(sfuPlayer, msg);
+		handler(msg);
 	});
 
 	ws.on('close', function(code, reason) {
 		console.error(`SFU disconnected: ${code} - ${reason}`);
-		onSFUDisconnected(playerComponent);
+		onSFUDisconnected();
 	});
 
 	ws.on('error', function(error) {
 		console.error(`SFU connection error: ${error}`);
-		onSFUDisconnected(playerComponent);
+		onSFUDisconnected();
 		try {
 			ws.close(1006 /* abnormal closure */, error);
 		} catch(err) {
@@ -853,7 +645,18 @@ sfuServer.on('connection', function (ws, req) {
 		}
 	});
 
-	requestStreamerId(playerComponent.getSFUStreamerComponent());
+	let sfuPlayer = new Player(SFUPlayerId, ws, PlayerType.SFU, false);
+	players.set(SFUPlayerId, sfuPlayer);
+	console.logColor(logging.Green, `SFU (${req.connection.remoteAddress}) connected `);
+
+	// TODO subscribe it to one of any of the streamers for now
+	for (let [streamerId, streamer] of streamers) {
+		sfuPlayer.subscribe(streamerId);
+		break;
+	}
+
+	// sfu also acts as a streamer
+	registerStreamer(SFUPlayerId, { ws: ws });
 });
 
 let playerCount = 0;
@@ -924,7 +727,7 @@ playerServer.on('connection', function (ws, req) {
 	var url = require('url');
 	const parsedUrl = url.parse(req.url);
 	const urlParams = new URLSearchParams(parsedUrl.search);
-	const whoSendsOffer = urlParams.has('OfferToReceive') && urlParams.get('OfferToReceive') !== 'false' ? WhoSendsOffer.Browser : WhoSendsOffer.Streamer;
+	const browserSendOffer = urlParams.has('OfferToReceive') && urlParams.get('OfferToReceive') !== 'false';
 
 	if (playerCount + 1 > maxPlayerCount && maxPlayerCount !== -1)
 	{
@@ -936,7 +739,7 @@ playerServer.on('connection', function (ws, req) {
 	++playerCount;
 	let playerId = sanitizePlayerId(nextPlayerId++);
 	console.logColor(logging.Green, `player ${playerId} (${req.connection.remoteAddress}) connected`);
-	let player = new Player(playerId, ws, PlayerType.Regular, whoSendsOffer);
+	let player = new Player(playerId, ws, PlayerType.Regular, browserSendOffer);
 	players.set(playerId, player);
 
 	ws.on('message', (msgRaw) =>{
@@ -994,9 +797,9 @@ function disconnectAllPlayers(streamerId) {
 	for (let player of clone.values()) {
 		 if (player.streamerId == streamerId) {
 		 	// disconnect players but just unsubscribe the SFU
-		 	const sfuPlayer = getSFUForStreamer(streamerId);
-		 	if (sfuPlayer && player.id == sfuPlayer.id) {
-				sfuPlayer.unsubscribe();
+		 	if (player.id == SFUPlayerId) {
+		 		// because we're working on a clone here we have to access directly
+				getSFU().unsubscribe();
 			} else {
 				player.ws.close();
 			}
@@ -1029,8 +832,15 @@ if (config.UseMatchmaker) {
 			type: 'connect',
 			address: typeof serverPublicIp === 'undefined' ? '127.0.0.1' : serverPublicIp,
 			port: config.UseHTTPS ? httpsPort : httpPort,
-			ready: streamers.size > 0,
-			playerConnected: playerConnected
+			//ready: streamers.size > 0,
+			// Start : AWS - Modified for testing, please comment this line in actual implemntation
+			ready: true,
+			// End : AWS - Modified for testing, please comment this line in actual implemntation
+			playerConnected: playerConnected,
+			// Start : AWS - InstanceID of signalling server is passed to MatchMaker
+			// this is used in Matchmaker to get the querystring from dynamoDB
+			instanceId:AWSInstanceID
+			// End : AWS - InstanceID of signalling server is passed to Matchmaker
 		};
 
 		matchmaker.write(JSON.stringify(message));
