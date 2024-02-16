@@ -7,7 +7,7 @@ ws.on('error', console.error);
 
 axios.get('http://localhost:90/signallingserver').then((res) => {
   if (res.status==200) {
-    console.log(res.data);
+    console.log(JSON.parse(res.data));
     url = JSON.parse(res.data).signallingServer;
     ws.send(JSON.stringify({signallingServer: url}));
   }
