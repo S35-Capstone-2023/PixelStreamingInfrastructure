@@ -71,5 +71,11 @@ module.exports = {
     	static: {
     		directory: path.join(__dirname, '../../../SignallingWebServer/Public'),
     	},
+      //Start : AWS - allowed origin from AWS
+    	allowedHosts: [
+        '.amazonaws.com',
+        '.cloudfront.net'
+      ]
+      //End: AWS - allowed origin from AWS
     },
 }
