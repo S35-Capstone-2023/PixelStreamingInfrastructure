@@ -8,7 +8,8 @@ ws.on('error', console.error);
 axios.get('http://localhost:90/signallingserver').then((res) => {
   if (res.status==200) {
     console.log(res.data);
-    ws.send(JSON.stringify({signallingServer: "ws://localhost:80"}));
+    url = JSON.parse(res.data).signallingServer;
+    ws.send(JSON.stringify({signallingServer: url}));
   }
 }).catch((error) => {
   console.log("error block");
