@@ -19,19 +19,21 @@ export const PixelStreamingWrapper = ({
 
     // Pixel streaming library instance is stored into this state variable after initialization:
     const [pixelStreaming, setPixelStreaming] = useState<PixelStreaming>();
-    
+
     // A boolean state variable that determines if the Click to play overlay is shown:
     const [clickToPlayVisible, setClickToPlayVisible] = useState(false);
 
     // Run on component mount:
     useEffect(() => {
         if (videoParent.current) {
+            console.log(initialSettings);
             // Attach Pixel Streaming library to videoParent element:
             const config = new Config({ initialSettings });
+            console.log(config);
             const streaming = new PixelStreaming(config, {
                 videoElementParent: videoParent.current
             });
-            
+            console.log(streaming);
             // register a playStreamRejected handler to show Click to play overlay if needed:
             streaming.addEventListener('playStreamRejected', () => {
                 setClickToPlayVisible(true);
@@ -39,6 +41,7 @@ export const PixelStreamingWrapper = ({
 
             // Save the library instance into component state so that it can be accessed later:
             setPixelStreaming(streaming);
+            console.log('check', pixelStreaming);
 
             // Clean up on component unmount:
             return () => {
