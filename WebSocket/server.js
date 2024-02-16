@@ -17,7 +17,7 @@ wss.on('connection', function connection(ws) {
     console.log(`Received data: ${json}`);
     wss.clients.forEach(function each(client) {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(json));
+            client.send(json);
         }
         return;
     })
