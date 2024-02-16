@@ -13,8 +13,8 @@ wss.on('connection', function connection(ws) {
     //     client.send(data);
     //   }
     // })
-    data = JSON.parse(json);
-    console.log(`Received data: ${data}`);
+    // data = JSON.parse(json);
+    console.log(`Received data: ${json}`);
     wss.clients.forEach(function each(client) {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
             client.send(json);
