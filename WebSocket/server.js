@@ -14,15 +14,14 @@ wss.on('connection', function connection(ws) {
     //   }
     // })
     data = JSON.parse(json);
-    if (data.signallingServer) {
-        console.log(`Signalling server: ${data.signallingServer}`);
-        wss.clients.forEach(function each(client) {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({signallingServer: data.signallingServer}));
-            }
-            return;
-        })
-    }
+    console.log(`Received data: ${data}`);
+    wss.clients.forEach(function each(client) {
+        if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(json);
+        }
+        return;
+    })
+    
   })
 })
 
