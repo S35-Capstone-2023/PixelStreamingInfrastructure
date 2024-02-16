@@ -50,7 +50,7 @@ export default class Streaming extends Component<Props, State> {
         ws.onmessage = (e) => {
             serverMessagesList.push(e.data);
             console.log('Message received ! ' + e.data);
-            if (e.data.includes('signallingServer')) {
+            if (JSON.parse(e.data).includes('signallingServer')) {
                 // need to add error handling
                 // var parsedMsg = e.data.split(':')[1].split('"')[1];
                 // this.setState({ serverMessage: signallingServer + parsedMsg });
