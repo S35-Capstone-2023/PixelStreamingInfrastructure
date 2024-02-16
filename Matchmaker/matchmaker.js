@@ -1,10 +1,10 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-var enableRedirectionLinks = true;
+var enableRedirectionLinks = false;
 var enableRESTAPI = true;
 
 const defaultConfig = {
 	// The port clients connect to the matchmaking service over HTTP
-	HttpPort: 80,
+	HttpPort: 90,
 	UseHTTPS: false,
 	// The matchmaking port the signaling service connects to the matchmaker
 	MatchmakerPort: 9999,
@@ -103,12 +103,18 @@ if(config.EnableWebserver) {
 // No servers are available so send some simple JavaScript to the client to make
 // it retry after a short period of time.
 function sendRetryResponse(res) {
-	// find check if a custom template should be used or the sample one
-	let html = fs.readFileSync(`${htmlDirectory}/queue/queue.html`, { encoding: 'utf8' })
-	html = html.replace(/\$\{cirrusServers\.size\}/gm, cirrusServers.size)
-
-	res.setHeader('content-type', 'text/html')
-	res.send(html)
+	res.send(`All ${cirrusServers.size} Cirrus servers are in use. Retrying in <span id="countdown">3</span> seconds.
+	<script>
+		var countdown = document.getElementById("countdown").textContent;
+		setInterval(function() {
+			countdown--;
+			if (countdown == 0) {
+				window.location.reload(1);
+			} else {
+				document.getElementById("countdown").textContent = countdown;
+			}
+		}, 1000);
+	</script>`);
 }
 
 // Get a Cirrus server if there is one available which has no clients connected.
@@ -142,7 +148,7 @@ if(enableRESTAPI) {
 			res.json({ signallingServer: `${cirrusServer.address}:${cirrusServer.port}`});
 			console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
 		} else {
-			res.json({ signallingServer: '', error: 'No signalling servers available'});
+			res.status(400).json({ signallingServer: '', error: 'No signalling servers available'});
 		}
 	});
 }
