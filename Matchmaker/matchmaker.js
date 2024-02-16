@@ -140,6 +140,10 @@ function getAvailableCirrusServer() {
 }
 
 if(enableRESTAPI) {
+	// Handle healthcheck
+	app.get('/', (req, res) => {
+		res.status(200).send('OK');
+	});
 	// Handle REST signalling server only request.
 	app.options('/signallingserver', cors())
 	app.get('/signallingserver', cors(),  (req, res) => {
