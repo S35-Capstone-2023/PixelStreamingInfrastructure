@@ -24,7 +24,7 @@ module.exports = merge(common, {
             // Refer cloudformation output : Callback URL for Cognito (CognitoCallBackURL)
             'process.env.callback_uri_cog': JSON.stringify(''),
             // Refer cloudformation output : Web socket endpoint for api server (APIGatewayWSAPI)
-            'process.env.api_ws': JSON.stringify(''),
+            'process.env.api_ws': JSON.stringify('ws://localhost:6969'),
             // Refer cloudformation output : Web socket endpoint for signalling server (SignallingServerWSAPI)
             'process.env.sig_ws': JSON.stringify('ws://localhost:80'),
             // No need to change this. If you modify, make sure you also update clientSecret environment variable for requestSession lambda

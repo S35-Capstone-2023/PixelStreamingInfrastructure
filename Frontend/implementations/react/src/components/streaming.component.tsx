@@ -15,8 +15,8 @@ type State = {
     disableButton: boolean | false;
 };
 
-// var ws = new WebSocket(process.env.api_ws);
-var signallingServer = process.env.sig_ws;
+var ws = new WebSocket(process.env.api_ws);
+// var signallingServer = process.env.sig_ws;
 
 export default class Streaming extends Component<Props, State> {
     constructor(props: Props) {
@@ -29,40 +29,42 @@ export default class Streaming extends Component<Props, State> {
         };
     }
 
-    // componentDidMount() {
-    //     const serverMessagesList: string[] = [];
-    //     ws.onopen = () => {
-    //         this.setState({ serverState: 'Connected to the server' });
-    //         console.log('Connected ! ');
-    //     };
-    //     ws.onclose = (e) => {
-    //         this.setState({
-    //             serverState: 'Disconnected. Check internet or server.'
-    //         });
-    //         console.log('Disconnected ! ');
-    //     };
-    //     ws.onerror = (e) => {
-    //         console.log('Error on connection ' + e);
-    //         this.setState({
-    //             serverState: 'Error while establishing connection '
-    //         });
-    //     };
-    //     ws.onmessage = (e) => {
-    //         serverMessagesList.push(e.data);
-    //         console.log('Message received ! ' + e.data);
-    //         if (e.data.includes('signallingServer')) {
-    //             // need to add error handling
-    //             var parsedMsg = e.data.split(':')[1].split('"')[1];
-    //             this.setState({ serverMessage: signallingServer + parsedMsg });
-    //         } else {
-    //             console.log('Waiting for session');
-    //         }
-    //     };
-    // }
+    componentDidMount() {
+        const serverMessagesList: string[] = [];
+        ws.onopen = () => {
+            this.setState({ serverState: 'Connected to the server' });
+            console.log('Connected ! ');
+        };
+        ws.onclose = (e) => {
+            this.setState({
+                serverState: 'Disconnected. Check internet or server.'
+            });
+            console.log('Disconnected ! ');
+        };
+        ws.onerror = (e) => {
+            console.log('Error on connection ' + e);
+            this.setState({
+                serverState: 'Error while establishing connection '
+            });
+        };
+        ws.onmessage = (e) => {
+            serverMessagesList.push(e.data);
+            console.log('Message received ! ' + e.data);
+            if (e.data.includes('signallingServer')) {
+                // need to add error handling
+                // var parsedMsg = e.data.split(':')[1].split('"')[1];
+                // this.setState({ serverMessage: signallingServer + parsedMsg });
+                let signallingServerUrl = JSON.parse(e.data).signallingServer;
+                this.setState({ serverMessage: signallingServerUrl });
+            } else {
+                console.log('Waiting for session');
+            }
+        };
+    }
 
-    // componentWillUnmount() {
-    //     ws.close;
-    // }
+    componentWillUnmount() {
+        ws.close;
+    }
 
     render() {
         const submitMessage = () => {
@@ -75,7 +77,6 @@ export default class Streaming extends Component<Props, State> {
             //     })
             // );
             console.log('message sent !');
-            this.setState({ serverMessage: signallingServer });
         };
 
         console.log('loading streaming component ! ');
@@ -89,7 +90,7 @@ export default class Streaming extends Component<Props, State> {
                 >
                     <h1>
                         {' '}
-                        Signalling Endpoint is ! {this.state.serverMessage}{' '}
+                        Signalling Endpoint is: {this.state.serverMessage}{' '}
                     </h1>
                     <PixelStreamingWrapper
                         initialSettings={{
