@@ -56,7 +56,8 @@ export default class Streaming extends Component<Props, State> {
                 // this.setState({ serverMessage: signallingServer + parsedMsg });
                 let signallingServerUrl = JSON.parse(e.data).signallingServer;
                 this.setState({
-                    serverMessage: 'ws://' + signallingServerUrl
+                    serverMessage:
+                        'ws://ec2-54-255-92-241.ap-southeast-1.compute.amazonaws.com' // + signallingServerUrl
                 });
                 ws.close();
             } else {
