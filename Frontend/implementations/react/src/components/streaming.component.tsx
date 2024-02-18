@@ -55,7 +55,9 @@ export default class Streaming extends Component<Props, State> {
                 // var parsedMsg = e.data.split(':')[1].split('"')[1];
                 // this.setState({ serverMessage: signallingServer + parsedMsg });
                 let signallingServerUrl = JSON.parse(e.data).signallingServer;
-                this.setState({ serverMessage: 'ws://' + signallingServerUrl });
+                this.setState({
+                    serverMessage: 'ws://' + signallingServerUrl + ':80'
+                });
                 ws.close();
             } else {
                 console.log('Waiting for session');
