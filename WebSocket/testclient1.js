@@ -15,6 +15,7 @@ axios.get('http://localhost:90/signallingserver').then((res) => {
   console.log("error block");
   ws.send(JSON.stringify({status: "wait"}));
 }).finally(() => {
+  ws.close()
 });
 
 // ws.on('open', function open() {
