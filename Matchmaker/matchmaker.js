@@ -12,7 +12,7 @@ const defaultConfig = {
 	// Log to file
 	LogToFile: true,
 	
-	EnableWebserver: true,
+	EnableWebserver: false,
 };
 
 // Similar to the Signaling Server (SS) code, load in a config.json file for the MM parameters
