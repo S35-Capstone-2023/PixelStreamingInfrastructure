@@ -3,5 +3,6 @@
 	"UseHTTPS": false,
 	"MatchmakerPort": 9999,
 	"LogToFile": true,
-	"EnableWebserver": true
+	"EnableWebserver": true,
+	"WebSocketUrl": "wss://tjh4dnpiw1.execute-api.ap-southeast-1.amazonaws.com/production/"
 }

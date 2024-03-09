@@ -30,11 +30,18 @@ const http = require('http').Server(app);
 const fs = require('fs');
 const path = require('path');
 const logging = require('./modules/logging.js');
+const WebSocket = require('ws');
 logging.RegisterConsoleLogger();
 
 if (config.LogToFile) {
 	logging.RegisterFileLogger('./logs');
 }
+
+// Start websocket
+const wss = new WebSocket(config.WebSocketUrl);
+wss.onopen = function open() {
+	console.log('Connected to WebSocket');
+};
 
 // A list of all the Cirrus server which are connected to the Matchmaker.
 var cirrusServers = new Map();
@@ -249,6 +256,12 @@ const matchmaker = net.createServer((connection) => {
 			if(cirrusServer) {
 				cirrusServer.ready = true;
 				console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} ready for use`);
+				wss.send(JSON.stringify({
+					action: "sendMessage",
+					job: "signallingServerReady",
+					count: cirrusServers.size
+				}));
+				console.log('Sent signallingServerReady after stream connected');
 			} else {
 				disconnect(connection);
 			}
@@ -258,6 +271,12 @@ const matchmaker = net.createServer((connection) => {
 			if(cirrusServer) {
 				cirrusServer.ready = false;
 				console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} no longer ready for use`);
+				wss.send(JSON.stringify({
+					action: "sendMessage",
+					job: "signallingServerReady",
+					count: cirrusServers.size
+				}));
+				console.log('Sent signallingServerReady after streamer disconnect');
 			} else {
 				disconnect(connection);
 			}
@@ -300,8 +319,15 @@ const matchmaker = net.createServer((connection) => {
 	connection.on('error', () => {
 		cirrusServer = cirrusServers.get(connection);
 		if(cirrusServer) {
-			cirrusServers.delete(connection);
+			console.log(cirrusServers.delete(connection));
+			console.log(cirrusServers.size)
 			console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} disconnected from Matchmaker`);
+			wss.send(JSON.stringify({
+				action: "sendMessage",
+				job: "signallingServerReady",
+				count: cirrusServers.size
+			}));
+			console.log('Sent signallingServerReady after server disconnect');
 		} else {
 			console.log(`Disconnected machine that wasn't a registered cirrus server, remote address: ${connection.remoteAddress}`);
 		}
