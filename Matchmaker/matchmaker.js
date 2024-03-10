@@ -37,22 +37,33 @@ if (config.LogToFile) {
 	logging.RegisterFileLogger('./logs');
 }
 
-// Start websocket
-const wss = new WebSocket(config.WebSocketUrl);
-wss.onopen = function open() {
-	console.log('Connected to WebSocket');
-};
-
-wss.onclose = function close() {
-	console.log('Disconnected from WebSocket');
-}
-
-wss.onerror = function error(err) {
-	console.log('WebSocket error: ' + err);
-}
 
 // A list of all the Cirrus server which are connected to the Matchmaker.
 var cirrusServers = new Map();
+
+
+// Function to create websocket
+const sendWebsocketMessage= function (job, address, port) {
+	const wss = new WebSocket(config.WebSocketUrl);
+	wss.onopen = function open() {
+		console.log('Connected to WebSocket');
+		wss.send(JSON.stringify({
+			action: "sendMessage",
+			job: job,
+			count: cirrusServers.size,
+			url: `${address}:${port}`
+		}));
+		console.log('Message sent')
+	};
+
+	wss.onclose = function close() {
+		console.log('Disconnected from WebSocket');
+	}
+
+	wss.onerror = function error(err) {
+		console.log('WebSocket error: ' + err);
+	}
+}
 
 //
 // Parse command line.
@@ -264,12 +275,17 @@ const matchmaker = net.createServer((connection) => {
 			if(cirrusServer) {
 				cirrusServer.ready = true;
 				console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} ready for use`);
-				wss.send(JSON.stringify({
-					action: "sendMessage",
-					job: "signallingServerReady",
-					count: cirrusServers.size,
-					url: `${cirrusServer.address}:${cirrusServer.port}`
-				}));
+				sendWebsocketMessage(
+					"signallingServerReady",
+					cirrusServer.address, 
+					cirrusServer.port
+				);
+				// wss.send(JSON.stringify({
+				// 	action: "sendMessage",
+				// 	job: "signallingServerReady",
+				// 	count: cirrusServers.size,
+				// 	url: `${cirrusServer.address}:${cirrusServer.port}`
+				// }));
 				console.log('Sent signallingServerReady after stream connected');
 			} else {
 				disconnect(connection);
@@ -280,11 +296,16 @@ const matchmaker = net.createServer((connection) => {
 			if(cirrusServer) {
 				cirrusServer.ready = false;
 				console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} no longer ready for use`);
-				wss.send(JSON.stringify({
-					action: "sendMessage",
-					job: "signallingServerReady",
-					count: cirrusServers.size
-				}));
+				sendWebsocketMessage(
+					"signallingServerDisconnect",
+					cirrusServer.address, 
+					cirrusServer.port
+				);
+				// wss.send(JSON.stringify({
+				// 	action: "sendMessage",
+				// 	job: "signallingServerDisconnect",
+				// 	count: cirrusServers.size
+				// }));
 				console.log('Sent signallingServerReady after streamer disconnect');
 			} else {
 				disconnect(connection);
@@ -331,11 +352,16 @@ const matchmaker = net.createServer((connection) => {
 			console.log(cirrusServers.delete(connection));
 			console.log(cirrusServers.size)
 			console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} disconnected from Matchmaker`);
-			wss.send(JSON.stringify({
-				action: "sendMessage",
-				job: "signallingServerReady",
-				count: cirrusServers.size
-			}));
+			sendWebsocketMessage(
+				"signallingServerDisconnect",
+				cirrusServer.address, 
+				cirrusServer.port
+			);
+			// wss.send(JSON.stringify({
+			// 	action: "sendMessage",
+			// 	job: "signallingServerReady",
+			// 	count: cirrusServers.size
+			// }));
 			console.log('Sent signallingServerReady after server disconnect');
 		} else {
 			console.log(`Disconnected machine that wasn't a registered cirrus server, remote address: ${connection.remoteAddress}`);
