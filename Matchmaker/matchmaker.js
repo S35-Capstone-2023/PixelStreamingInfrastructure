@@ -259,7 +259,8 @@ const matchmaker = net.createServer((connection) => {
 				wss.send(JSON.stringify({
 					action: "sendMessage",
 					job: "signallingServerReady",
-					count: cirrusServers.size
+					count: cirrusServers.size,
+					url: `${cirrusServer.address}:${cirrusServer.port}`
 				}));
 				console.log('Sent signallingServerReady after stream connected');
 			} else {
