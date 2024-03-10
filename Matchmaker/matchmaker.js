@@ -50,7 +50,7 @@ const sendWebsocketMessage= function (job, address, port) {
 		wss.send(JSON.stringify({
 			action: "sendMessage",
 			job: job,
-			count: cirrusServers.size,
+			count: getCountCirrusServers(),
 			url: `${address}:${port}`
 		}));
 		console.log('Message sent')
@@ -148,13 +148,13 @@ function getAvailableCirrusServer() {
 	for (cirrusServer of cirrusServers.values()) {
 		if (cirrusServer.numConnectedClients === 0 && cirrusServer.ready === true) {
 
-			// Check if we had at least 10 seconds since the last redirect, avoiding the 
+			// Check if we had at least 5 seconds since the last redirect, avoiding the 
 			// chance of redirecting 2+ users to the same SS before they click Play.
-			// In other words, give the user 10 seconds to click play button the claim the server.
-			if( cirrusServer.hasOwnProperty('lastRedirect')) {
-				if( ((Date.now() - cirrusServer.lastRedirect) / 1000) < 10 )
-					continue;
-			}
+			// In other words, give the user 5 seconds to click play button the claim the server.
+			// if( cirrusServer.hasOwnProperty('lastRedirect')) {
+			// 	if( ((Date.now() - cirrusServer.lastRedirect) / 1000) < 5 )
+			// 		continue;
+			// }
 			cirrusServer.lastRedirect = Date.now();
 
 			return cirrusServer;
@@ -163,6 +163,16 @@ function getAvailableCirrusServer() {
 	
 	console.log('WARNING: No empty Cirrus servers are available');
 	return undefined;
+}
+
+function getCountCirrusServers() {
+	let count = 0;
+	for (cirrusServer of cirrusServers.values()) {
+		if (cirrusServer.numConnectedClients === 0 && cirrusServer.ready === true) {
+			count++;
+		}
+	}
+	return count
 }
 
 if(enableRESTAPI) {
@@ -175,7 +185,13 @@ if(enableRESTAPI) {
 	app.get('/signallingserver', cors(),  (req, res) => {
 		cirrusServer = getAvailableCirrusServer();
 		if (cirrusServer != undefined) {
-			res.json({ signallingServer: `${cirrusServer.address}:${cirrusServer.port}`, count: cirrusServers.size});
+			console.log(cirrusServers.size)
+			count = getCountCirrusServers();
+			console.log(count);
+			res.json({ 
+				signallingServer: `${cirrusServer.address}:${cirrusServer.port}`, 
+				count: count
+			});
 			console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
 		} else {
 			res.status(400).json({ signallingServer: '', error: 'No signalling servers available'});
@@ -319,6 +335,11 @@ const matchmaker = net.createServer((connection) => {
 			} else {
 				disconnect(connection);
 			}
+			sendWebsocketMessage(
+				"signallingServerDisconnect",
+				cirrusServer.address, 
+				cirrusServer.port
+			);
 		} else if (message.type === 'clientDisconnected') {
 			// A client disconnects from a Cirrus server.
 			cirrusServer = cirrusServers.get(connection);
@@ -332,6 +353,11 @@ const matchmaker = net.createServer((connection) => {
 			} else {				
 				disconnect(connection);
 			}
+			sendWebsocketMessage(
+				"signallingServerDisconnect",
+				cirrusServer.address, 
+				cirrusServer.port
+			);
 		} else if (message.type === 'ping') {
 			cirrusServer = cirrusServers.get(connection);
 			if(cirrusServer) {
