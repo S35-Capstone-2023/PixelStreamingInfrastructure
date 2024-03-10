@@ -156,7 +156,7 @@ if(enableRESTAPI) {
 	app.get('/signallingserver', cors(),  (req, res) => {
 		cirrusServer = getAvailableCirrusServer();
 		if (cirrusServer != undefined) {
-			res.json({ signallingServer: `${cirrusServer.address}:${cirrusServer.port}`});
+			res.json({ signallingServer: `${cirrusServer.address}:${cirrusServer.port}`, count: cirrusServers.size});
 			console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
 		} else {
 			res.status(400).json({ signallingServer: '', error: 'No signalling servers available'});
