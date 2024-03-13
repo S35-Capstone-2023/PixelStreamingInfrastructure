@@ -145,7 +145,7 @@ function sendRetryResponse(res) {
 
 // Get a Cirrus server if there is one available which has no clients connected.
 function getAvailableCirrusServer() {
-	for (cirrusServer of cirrusServers.values()) {
+	for (let cirrusServer of cirrusServers.values()) {
 		if (cirrusServer.numConnectedClients === 0 && cirrusServer.ready === true) {
 
 			// Check if we had at least 5 seconds since the last redirect, avoiding the 
@@ -167,7 +167,9 @@ function getAvailableCirrusServer() {
 
 function getCountCirrusServers() {
 	let count = 0;
-	for (cirrusServer of cirrusServers.values()) {
+	for (let cirrusServer of cirrusServers.values()) {
+		console.log(cirrusServer.address)
+		console.log(cirrusServer.port)
 		if (cirrusServer.numConnectedClients === 0 && cirrusServer.ready === true) {
 			count++;
 		}
