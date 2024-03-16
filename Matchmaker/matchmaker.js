@@ -4,7 +4,7 @@ var enableRESTAPI = true;
 
 const defaultConfig = {
 	// The port clients connect to the matchmaking service over HTTP
-	HttpPort: 80,
+	HttpPort: 90,
 	UseHTTPS: false,
 	// The matchmaking port the signaling service connects to the matchmaker
 	MatchmakerPort: 9999,
@@ -38,6 +38,31 @@ if (config.LogToFile) {
 
 // A list of all the Cirrus server which are connected to the Matchmaker.
 var cirrusServers = new Map();
+
+// AWS Integration
+const WebSocket = require('ws');
+// Function to create websocket
+const sendWebsocketMessage= function (job, address, port) {
+	const wss = new WebSocket(config.WebSocketUrl);
+	wss.onopen = function open() {
+		console.log('Connected to WebSocket');
+		wss.send(JSON.stringify({
+			action: "sendMessage",
+			job: job,
+			count: getCountCirrusServers(),
+			url: `${address}:${port}`
+		}));
+		console.log('Message sent')
+	};
+
+	wss.onclose = function close() {
+		console.log('Disconnected from WebSocket');
+	}
+
+	wss.onerror = function error(err) {
+		console.log('WebSocket error: ' + err);
+	}
+}
 
 //
 // Parse command line.
@@ -102,14 +127,33 @@ if(config.EnableWebserver) {
 
 // No servers are available so send some simple JavaScript to the client to make
 // it retry after a short period of time.
-function sendRetryResponse(res) {
-	// find check if a custom template should be used or the sample one
-	let html = fs.readFileSync(`${htmlDirectory}/queue/queue.html`, { encoding: 'utf8' })
-	html = html.replace(/\$\{cirrusServers\.size\}/gm, cirrusServers.size)
+// function sendRetryResponse(res) {
+// 	// find check if a custom template should be used or the sample one
+// 	let html = fs.readFileSync(`${htmlDirectory}/queue/queue.html`, { encoding: 'utf8' })
+// 	html = html.replace(/\$\{cirrusServers\.size\}/gm, cirrusServers.size)
 
-	res.setHeader('content-type', 'text/html')
-	res.send(html)
+// 	res.setHeader('content-type', 'text/html')
+// 	res.send(html)
+// }
+
+// AWS Integration
+function sendRetryResponse(res) {
+	res.send(`All ${cirrusServers.size} Cirrus servers are in use. Retrying in <span id="countdown">3</span> seconds.
+	<script>
+		var countdown = document.getElementById("countdown").textContent;
+		setInterval(function() {
+			countdown--;
+			if (countdown == 0) {
+				window.location.reload(1);
+			} else {
+				document.getElementById("countdown").textContent = countdown;
+			}
+		}, 1000);
+	</script>`);
 }
+
+// AWS Integration
+var timeSinceRedirect = 10
 
 // Get a Cirrus server if there is one available which has no clients connected.
 function getAvailableCirrusServer() {
@@ -120,7 +164,7 @@ function getAvailableCirrusServer() {
 			// chance of redirecting 2+ users to the same SS before they click Play.
 			// In other words, give the user 10 seconds to click play button the claim the server.
 			if( cirrusServer.hasOwnProperty('lastRedirect')) {
-				if( ((Date.now() - cirrusServer.lastRedirect) / 1000) < 10 )
+				if( ((Date.now() - cirrusServer.lastRedirect) / 1000) < timeSinceRedirect )
 					continue;
 			}
 			cirrusServer.lastRedirect = Date.now();
@@ -133,13 +177,36 @@ function getAvailableCirrusServer() {
 	return undefined;
 }
 
+// AWS Integration
+function getCountCirrusServers() {
+	let count = 0;
+	for (let cirrusServer of cirrusServers.values()) {
+		console.log(cirrusServer.address)
+		console.log(cirrusServer.port)
+		if (cirrusServer.numConnectedClients === 0 && cirrusServer.ready === true) {
+			if( cirrusServer.hasOwnProperty('lastRedirect')) {
+				if( ((Date.now() - cirrusServer.lastRedirect) / 1000) < timeSinceRedirect )
+					continue;
+			}
+			count++;
+		}
+	}
+	return count
+}
+
 if(enableRESTAPI) {
 	// Handle REST signalling server only request.
 	app.options('/signallingserver', cors())
 	app.get('/signallingserver', cors(),  (req, res) => {
 		cirrusServer = getAvailableCirrusServer();
 		if (cirrusServer != undefined) {
-			res.json({ signallingServer: `${cirrusServer.address}:${cirrusServer.port}`});
+			console.log(cirrusServers.size)
+			count = getCountCirrusServers();
+			console.log(count);
+			res.json({ 
+				signallingServer: `${cirrusServer.address}:${cirrusServer.port}`, 
+				count: count
+			});
 			console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
 		} else {
 			res.json({ signallingServer: '', error: 'No signalling servers available'});
@@ -239,6 +306,12 @@ const matchmaker = net.createServer((connection) => {
 			if(cirrusServer) {
 				cirrusServer.ready = true;
 				console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} ready for use`);
+				sendWebsocketMessage(
+					"signallingServerReady",
+					cirrusServer.address, 
+					cirrusServer.port
+				);
+				console.log('Sent signallingServerReady after stream connected');
 			} else {
 				disconnect(connection);
 			}
@@ -248,6 +321,12 @@ const matchmaker = net.createServer((connection) => {
 			if(cirrusServer) {
 				cirrusServer.ready = false;
 				console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} no longer ready for use`);
+				sendWebsocketMessage(
+					"signallingServerDisconnect",
+					cirrusServer.address, 
+					cirrusServer.port
+				);
+				console.log('Sent signallingServerReady after stream disconnected');
 			} else {
 				disconnect(connection);
 			}
@@ -260,6 +339,12 @@ const matchmaker = net.createServer((connection) => {
 			} else {
 				disconnect(connection);
 			}
+			sendWebsocketMessage(
+				"signallingServerOccupied",
+				cirrusServer.address, 
+				cirrusServer.port
+			);
+			console.log('Sent signallingServerOccupied after client connected to server');
 		} else if (message.type === 'clientDisconnected') {
 			// A client disconnects from a Cirrus server.
 			cirrusServer = cirrusServers.get(connection);
@@ -273,6 +358,12 @@ const matchmaker = net.createServer((connection) => {
 			} else {				
 				disconnect(connection);
 			}
+			sendWebsocketMessage(
+				"signallingServerDisconnect",
+				cirrusServer.address, 
+				cirrusServer.port
+			);
+			console.log('Sent signallingServerDisconnect after client disconnected from server');
 		} else if (message.type === 'ping') {
 			cirrusServer = cirrusServers.get(connection);
 			if(cirrusServer) {
@@ -292,6 +383,12 @@ const matchmaker = net.createServer((connection) => {
 		if(cirrusServer) {
 			cirrusServers.delete(connection);
 			console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} disconnected from Matchmaker`);
+			sendWebsocketMessage(
+				"signallingServerDisconnect",
+				cirrusServer.address, 
+				cirrusServer.port
+			);
+			console.log('Sent signallingServerReady after client error disconnect');
 		} else {
 			console.log(`Disconnected machine that wasn't a registered cirrus server, remote address: ${connection.remoteAddress}`);
 		}
