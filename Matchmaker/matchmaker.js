@@ -13,6 +13,9 @@ const defaultConfig = {
 	LogToFile: true,
 	
 	EnableWebserver: true,
+
+	// AWS Integration
+	WebSocketURL: "",
 };
 
 // Similar to the Signaling Server (SS) code, load in a config.json file for the MM parameters
@@ -21,6 +24,10 @@ const argv = require('yargs').argv;
 var configFile = (typeof argv.configFile != 'undefined') ? argv.configFile.toString() : 'config.json';
 console.log(`configFile ${configFile}`);
 const config = require('./modules/config.js').init(configFile, defaultConfig);
+// AWS Integration
+// if (typeof argv.WebSocketURL != 'undefined') {
+// 	config.WebSocketURL = argv.WebSocketURL;
+// }
 console.log("Config: " + JSON.stringify(config, null, '\t'));
 
 const express = require('express');
@@ -39,11 +46,22 @@ if (config.LogToFile) {
 // A list of all the Cirrus server which are connected to the Matchmaker.
 var cirrusServers = new Map();
 
+//
+// Parse command line.
+//
+
+if (typeof argv.HttpPort != 'undefined') {
+	config.HttpPort = argv.HttpPort;
+}
+if (typeof argv.MatchmakerPort != 'undefined') {
+	config.MatchmakerPort = argv.MatchmakerPort;
+}
+
 // AWS Integration
 const WebSocket = require('ws');
 // Function to create websocket
 const sendWebsocketMessage= function (job, address, port) {
-	const wss = new WebSocket(config.WebSocketUrl);
+	const wss = new WebSocket(config.WebSocketURL);
 	wss.onopen = function open() {
 		console.log('Connected to WebSocket');
 		wss.send(JSON.stringify({
@@ -62,17 +80,6 @@ const sendWebsocketMessage= function (job, address, port) {
 	wss.onerror = function error(err) {
 		console.log('WebSocket error: ' + err);
 	}
-}
-
-//
-// Parse command line.
-//
-
-if (typeof argv.HttpPort != 'undefined') {
-	config.HttpPort = argv.HttpPort;
-}
-if (typeof argv.MatchmakerPort != 'undefined') {
-	config.MatchmakerPort = argv.MatchmakerPort;
 }
 
 http.listen(config.HttpPort, () => {
