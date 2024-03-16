@@ -7,7 +7,7 @@
 	"LogVerbose": true,
 	"HomepageFile": "player.html",
 	"AdditionalRoutes": {},
-	"EnableWebserver": false,
+	"EnableWebserver": true,
 	"MatchmakerAddress": "",
 	"MatchmakerPort": 9999,
 	"PublicIp": "localhost",
