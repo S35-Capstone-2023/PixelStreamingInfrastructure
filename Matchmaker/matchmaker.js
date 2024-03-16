@@ -209,7 +209,11 @@ if(enableRESTAPI) {
 			});
 			console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
 		} else {
-			res.json({ signallingServer: '', error: 'No signalling servers available'});
+			res.json({ 
+				signallingServer: '',
+				count: 0,
+				error: 'No signalling servers available'
+			});
 		}
 	});
 }
