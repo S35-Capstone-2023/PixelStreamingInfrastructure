@@ -34,7 +34,8 @@ const defaultConfig = {
 	StreamerPort: 8888,
 	SFUPort: 8889,
 	MaxPlayerCount: -1,
-	DisableSSLCert: true
+	DisableSSLCert: true,
+	AWSInstanceID:''
 };
 
 const argv = require('yargs').argv;
@@ -106,6 +107,7 @@ var maxPlayerCount = -1;
 var gameSessionId;
 var userSessionId;
 var serverPublicIp;
+var AWSInstanceID;
 
 // `clientConfig` is send to Streamer and Players
 // Example of STUN server setting
@@ -117,6 +119,10 @@ var clientConfig = { type: 'config', peerConnectionOptions: {} };
 try {
 	if (typeof config.PublicIp != 'undefined') {
 		serverPublicIp = config.PublicIp.toString();
+	}
+
+	if (typeof config.AWSInstanceID != 'undefined') {
+		AWSInstanceID = config.AWSInstanceID.toString();
 	}
 
 	if (typeof config.HttpPort != 'undefined') {
@@ -1030,7 +1036,8 @@ if (config.UseMatchmaker) {
 			address: typeof serverPublicIp === 'undefined' ? '127.0.0.1' : serverPublicIp,
 			port: config.UseHTTPS ? httpsPort : httpPort,
 			ready: streamers.size > 0,
-			playerConnected: playerConnected
+			playerConnected: playerConnected,
+			instanceId: AWSInstanceID
 		};
 
 		matchmaker.write(JSON.stringify(message));
