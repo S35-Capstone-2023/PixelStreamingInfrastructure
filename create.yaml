@@ -449,8 +449,7 @@ Resources:
               su ubuntu
               git clone -b UE5.3.3 https://github.com/S35-Capstone-2023/PixelStreamingInfrastructure.git
               cd ./PixelStreamingInfrastructure/Matchmaker
-              ./platform_scripts/bash/run.sh --WebSocketURL ${WebSocketURL}
-            - WebSocketURL: !Sub "wss://${ConnectionHandlerAPI}.execute-api.${AWS::Region}.amazonaws.com/production"
+              ./platform_scripts/bash/run.sh
       LaunchTemplateName: "MatchmakerLaunchTemplate"
 
   SignallingLaunchTemplate:
@@ -473,11 +472,6 @@ Resources:
                 Value: "signalling"
         SecurityGroupIds:
           - !GetAtt SignallingInstanceSecurityGroup.GroupId
-        UserData:
-          Fn::Base64: !Sub |
-            #!/bin/bash
-            su ubuntu
-            git clone -b UE5.3.3 https://github.com/S35-Capstone-2023/PixelStreamingInfrastructure.git
       LaunchTemplateName: "SignallingLaunchTemplate"
 
   MatchMakingInstance:
@@ -514,6 +508,8 @@ Resources:
             Action:
               - "sts:AssumeRole"
       Description: "Role for EC2 servers"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
       Policies:
         - PolicyName: registerInstancesToTG
           PolicyDocument:
@@ -807,6 +803,14 @@ Resources:
               print(resp.status)
 
           def lambda_handler(event, context):
+              
+              lambdaFunc=boto3.client('lambda')
+              
+              response= lambdaFunc.get_function(
+                  FunctionName='createInstances'
+                  )
+              lambdaArnCreateInstances=response['Configuration']['FunctionArn']
+              
               messageReqId=event["requestContext"]["requestId"]
               uniqueId=str(event["requestContext"]["requestTimeEpoch"])
               connectionId = event["requestContext"]["connectionId"]
@@ -848,9 +852,10 @@ Resources:
               # Once ready, frontend will start streaming right away
               elif event_body["job"] == "joinWaitList":
                   # Check with matchmaker server if any signalling servers are ready
-                  resp = http.request("GET", matchmaker_url)
+                  resp = http.request("GET", matchmaker_url + "/signallingserver")
                   print("response from matchmaker")
                   print(resp.data)
+                  print(resp.status)
                   if resp.status != 400:
                       print(resp.data)
                       response = websocket_client.post_to_connection(
@@ -866,14 +871,19 @@ Resources:
                           'body': "streaming started"
                       }
                   else:
-                      delete_connection(connectionId)
+                      print("No server to service request")
+                      
+                      lambdaFunc.invoke(
+                          FunctionName = lambdaArnCreateInstances,
+                          InvocationType = 'Event'
+                      )
+                      
                       response = queue.send_message(
                           MessageBody=json.dumps(client_details),
                           MessageGroupId=messageReqId,
                           MessageDeduplicationId=uniqueId
                       )
                       print("Added to queue")
-                      # TODO start new instance
                       response = websocket_client.post_to_connection(
                           ConnectionId=connectionId,
                           Data=json.dumps({
