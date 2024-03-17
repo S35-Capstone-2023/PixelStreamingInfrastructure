@@ -160,7 +160,7 @@ function sendRetryResponse(res) {
 }
 
 // AWS Integration
-var timeSinceRedirect = 10
+var timeSinceRedirect = 1
 
 // Get a Cirrus server if there is one available which has no clients connected.
 function getAvailableCirrusServer() {
