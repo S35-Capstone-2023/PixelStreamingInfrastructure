@@ -13,9 +13,6 @@ const defaultConfig = {
 	LogToFile: true,
 	
 	EnableWebserver: true,
-
-	// AWS Integration
-	WebSocketURL: "",
 };
 
 // Similar to the Signaling Server (SS) code, load in a config.json file for the MM parameters
