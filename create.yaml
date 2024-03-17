@@ -815,17 +815,16 @@ Resources:
                       "connection_id": connectionId,
               }
               # When frontend is listening and checking for number of ready servers
-              if event_body["job"] == "listeningForServers":
-                  resp = http.request("GET", matchmaker_url)
-                  if resp.status != 400:
-                      print(resp.data)
-                      response = websocket_client.post_to_connection(
-                          ConnectionId=connectionId,
-                          Data=json.dumps({
-                              "event": "numOfReadyServers",
-                              "count": json.loads(resp.data)["count"]
-                          })
-                      )
+              if event_body["job"] == "getNumReadyServers":
+                  resp = http.request("GET", matchmaker_url + "/signallingservercount")
+                  print(resp.data)
+                  response = websocket_client.post_to_connection(
+                      ConnectionId=connectionId,
+                      Data=json.dumps({
+                          "event": "numReadyServers",
+                          "count": json.loads(resp.data)["count"]
+                      })
+                  )
                   # To check with database if userId exist
                   # If userId exists, then replace connection id
                   # else, add new row with connection id
@@ -885,75 +884,6 @@ Resources:
                           'statusCode': 200,
                           'body': json.dumps(client_details) + " added to queue"
                       }
-              # To notify frontend clients when signalling server is ready
-              elif event_body["job"] in ["signallingServerDisconnect", "signallingServerOccupied"]:
-                  # Check if any request in the queue,
-                  # if yes, 
-                  # - get connection id from queue
-                  # - send signallingserver url to connection id
-                  # - remove from queue
-                  # - set status on db for connection id to streaming
-                  # if no, get all connection ids on db and send server count to all
-                  messages = queue.receive_messages(MaxNumberOfMessages=10)
-                  if not messages == []:
-                      print(messages[0].body)
-                      print(json.loads(messages[0].body)["connection_id"])
-                      connection_id2 = json.loads(messages[0].body)["connection_id"]
-                      response = websocket_client.post_to_connection(
-                          ConnectionId=connection_id2,
-                          Data=json.dumps({
-                              "event": "signallingServerURL",
-                              "ip": event_body["url"]
-                          })
-                      )
-                      delete_connection(connectionId)
-                      messages[0].delete()
-                      return {
-                          'statusCode': 200,
-                          'body': "streaming for client"
-                      }
-                  else:
-                  # resp = http.request(
-                  #     "POST", 
-                  #     backend_url,
-                  #     body=encoded_data,
-                  #     headers={'Content-Type': 'application/json'}
-                  # )
-                      resp = http.request(
-                          "GET", 
-                          backend_url + "/all"
-                      )
-                      print(resp.data)
-                      for client in json.loads(resp.data):
-                          response = websocket_client.post_to_connection(
-                              ConnectionId=client["connection_id"],
-                              Data=json.dumps({
-                                  "event": "numOfReadyServers",
-                                  "count": event_body["count"]
-                              })
-                          )
-                      return {
-                          'statusCode': 200,
-                          'body': "updated frontend clients"
-                      }
-              elif event_body["job"] =="signallingServerDisconnect":
-                  resp = http.request(
-                      "GET", 
-                      backend_url + "/all"
-                  )
-                  print(resp.data)
-                  for client in json.loads(resp.data):
-                      response = websocket_client.post_to_connection(
-                          ConnectionId=client["connection_id"],
-                          Data=json.dumps({
-                              "event": "numOfReadyServers",
-                              "count": event_body["count"]
-                          })
-                      )
-                  return {
-                      'statusCode': 200,
-                      'body': "updated frontend clients"
-                  }
       Description: "Handle various messages from client and take appropriate action"
       Environment:
         Variables:
@@ -963,6 +893,69 @@ Resources:
             !Join ["", ["http://", !GetAtt MatchMakerServerALB.DNSName, ":90"]]
           SQSName: !GetAtt SessionQueue.QueueName
       FunctionName: "receiveMessage"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+
+  CreateInstanceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LambdaIAMRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+
+          def lambda_handler(event, context):
+              
+              # this is used to chose a subnet randomly while generating the instance
+              allSubnets=['SubnetIdPublicA','SubnetIdPublicB']
+              
+              matchMakerPrivateIP=''
+              ec2MatchMaker = boto3.client('ec2')
+              response = ec2MatchMaker.describe_instances(Filters=[{'Name': 'tag:aws:cloudformation:logical-id', 'Values': ['MatchMakingInstance']}])
+              
+              if(len(response['Reservations'])==1):
+                  print(response['Reservations'][0]['Instances'][0]['PrivateIpAddress'])
+                  # this is used to retrieve the private ip of Matchmaker which allows Signalling instance to interface with it
+                  matchMakerPrivateIP=response['Reservations'][0]['Instances'][0]['PrivateIpAddress']
+              
+              userData='''#!/bin/bash
+              sudo su
+              git clone -b UE5.3.3 https://github.com/S35-Capstone-2023/PixelStreamingInfrastructure.git
+              aws s3 cp --recursive s3://capstone-storage-s35/Linux ./Linux
+              chmod +x ./Linux/Capstone.sh
+              ./Linux/Capstone.sh -RenderOffScreen -AudioMixer -PixelStreamingIp=localhost -PixelStreamingPort=8888 & ./PixelStreamingInfrastructure/SignallingWebServer/platform_scripts/Start_WithTURN_SignallingServer.sh --UseMatchmaker true --MatchmakerAddress {}'''.format(matchMakerPrivateIP)
+              
+              print(event)
+              
+              ##TODO implement limit for signallingserver
+              ec2 = boto3.client('ec2')
+              response = ec2.run_instances(
+                  ImageId=os.environ["ImageId"],
+                  SubnetId=os.environ[allSubnets[0]],
+                  LaunchTemplate={'LaunchTemplateName': os.environ["LaunchTemplateName"]},
+                  UserData=userData,
+                  MinCount=1,
+                  MaxCount=1
+              )
+              print(response['Instances'][0]['InstanceId'])
+              # get instance id
+              instanceId = response['Instances'][0]['InstanceId']
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('New instance created '+instanceId)
+              }
+      Description: "Create Signalling instance on a trigger"
+      Environment:
+        Variables:
+          ImageId: !Ref "SignallingServerAMI"
+          LaunchTemplateName: "SignallingLaunchTemplate"
+          SubnetIdPublicA: !GetAtt PublicSubnet0.SubnetId
+          SubnetIdPublicB: !GetAtt PublicSubnet1.SubnetId
+      FunctionName: "createInstances"
       Handler: "index.lambda_handler"
       Runtime: "python3.10"
       Timeout: 900
