@@ -960,14 +960,7 @@ Resources:
           BACKEND_URL: !Ref "BackendURL"
           WEBSOCKET_URL: !Sub "https://${ConnectionHandlerAPI}.execute-api.${AWS::Region}.amazonaws.com/production"
           MATCHMAKER_URL:
-            !Join [
-              "",
-              [
-                "http://",
-                !GetAtt MatchMakerServerALB.DNSName,
-                ":90/signallingserver",
-              ],
-            ]
+            !Join ["", ["http://", !GetAtt MatchMakerServerALB.DNSName, ":90"]]
           SQSName: !GetAtt SessionQueue.QueueName
       FunctionName: "receiveMessage"
       Handler: "index.lambda_handler"

@@ -183,7 +183,7 @@ if(enableRESTAPI) {
 			});
 			console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
 		} else {
-			res.json({ 
+			res.status(400).json({ 
 				signallingServer: '',
 				error: 'No signalling servers available'
 			});
