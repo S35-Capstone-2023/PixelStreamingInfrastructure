@@ -181,21 +181,23 @@ if(enableRESTAPI) {
 	app.get('/signallingserver', cors(),  (req, res) => {
 		cirrusServer = getAvailableCirrusServer();
 		if (cirrusServer != undefined) {
-			console.log(cirrusServers.size)
-			count = getCountCirrusServers();
-			console.log(count);
 			res.json({ 
-				signallingServer: `${cirrusServer.address}:${cirrusServer.port}`, 
-				count: count
+				signallingServer: `${cirrusServer.address}:${cirrusServer.port}`
 			});
 			console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
 		} else {
 			res.json({ 
 				signallingServer: '',
-				count: 0,
 				error: 'No signalling servers available'
 			});
 		}
+	});
+	app.options('/signallingservercount', cors())
+	app.get('/signallingservercount', cors(),  (req, res) => {
+		count = getCountCirrusServers();
+		res.json({
+			count: count
+		});
 	});
 }
 
