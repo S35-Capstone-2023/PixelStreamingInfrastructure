@@ -26,7 +26,7 @@ Parameters:
   MatchmakerAMI:
     Description: The AMI for Matchmaker server
     Type: String
-    Default: "ami-0f1c51ac3341e6333"
+    Default: "ami-0e86d843c7edaf4e8"
   MatchmakerInstanceType:
     Description: The instance type for Matchmaker server
     Type: String
@@ -34,7 +34,7 @@ Parameters:
   SignallingServerAMI:
     Description: The AMI for Signalling server
     Type: String
-    Default: "ami-0c67f35ebd5af2c5c"
+    Default: "ami-0a9fbe194f554911f"
   SignallingInstanceType:
     Description: The instance type for Signalling server
     Type: String
@@ -193,6 +193,14 @@ Resources:
           IpProtocol: "TCP"
           FromPort: 22
           ToPort: 22
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "TCP"
+          FromPort: 19303
+          ToPort: 19303
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "UDP"
+          FromPort: 19303
+          ToPort: 19303
       VpcId:
         Ref: "VPC"
 
@@ -212,6 +220,14 @@ Resources:
           IpProtocol: "TCP"
           FromPort: 80
           ToPort: 80
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "TCP"
+          FromPort: 19303
+          ToPort: 19303
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "UDP"
+          FromPort: 19303
+          ToPort: 19303
       VpcId:
         Ref: "VPC"
 
@@ -411,6 +427,8 @@ Resources:
 
   MatchmakerLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
+    DependsOn:
+      - ConnectionHandlerAPI
     Properties:
       LaunchTemplateData:
         ImageId: !Ref "MatchmakerAMI"
@@ -425,10 +443,14 @@ Resources:
         SecurityGroupIds:
           - !GetAtt MatchmakerInstanceSecurityGroup.GroupId
         UserData:
-          Fn::Base64: !Sub |
-            #!/bin/bash
-            cd /home/ubuntu/PixelStreamingInfrastructure/Matchmaker
-            ./platform_scripts/bash/run.sh
+          Fn::Base64: !Sub
+            - |
+              #!/bin/bash
+              su ubuntu
+              git clone -b UE5.3.3 https://github.com/S35-Capstone-2023/PixelStreamingInfrastructure.git
+              cd ./PixelStreamingInfrastructure/Matchmaker
+              ./platform_scripts/bash/run.sh --WebSocketURL ${WebSocketURL}
+            - WebSocketURL: !Sub "wss://${ConnectionHandlerAPI}.execute-api.${AWS::Region}.amazonaws.com/production"
       LaunchTemplateName: "MatchmakerLaunchTemplate"
 
   SignallingLaunchTemplate:
@@ -451,12 +473,18 @@ Resources:
                 Value: "signalling"
         SecurityGroupIds:
           - !GetAtt SignallingInstanceSecurityGroup.GroupId
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            su ubuntu
+            git clone -b UE5.3.3 https://github.com/S35-Capstone-2023/PixelStreamingInfrastructure.git
       LaunchTemplateName: "SignallingLaunchTemplate"
 
   MatchMakingInstance:
     Type: AWS::EC2::Instance
     DependsOn:
       - Ec2InstanceProfiles
+      - MatchmakerLaunchTemplate
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref "MatchmakerLaunchTemplate"
@@ -509,9 +537,8 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - "s3:GetObject"
-                  - "s3:PutObject"
-                  - "s3:ListBucket"
+                  - "s3:*"
+                  - "s3-object-lambda:*"
                 Resource:
                   - !Sub "arn:aws:execute-api:*:${AWS::AccountId}:*"
       RoleName: "EC2Role"
@@ -931,7 +958,7 @@ Resources:
       Environment:
         Variables:
           BACKEND_URL: !Ref "BackendURL"
-          WEBSOCKET_URL: !Sub "wss://${ConnectionHandlerAPI}.execute-api.${AWS::Region}.amazonaws.com/production"
+          WEBSOCKET_URL: !Sub "https://${ConnectionHandlerAPI}.execute-api.${AWS::Region}.amazonaws.com/production"
           MATCHMAKER_URL:
             !Join [
               "",
@@ -1074,4 +1101,4 @@ Outputs:
 
   APIGatewayAPI:
     Description: "HTTPS endpoint for api server"
-    Value: !Sub "https://${ConnectionHandlerAPI}.execute-api.${AWS::Region}.amazonaws.com/production"
+    Value: !Sub "wss://${ConnectionHandlerAPI}.execute-api.${AWS::Region}.amazonaws.com/production"

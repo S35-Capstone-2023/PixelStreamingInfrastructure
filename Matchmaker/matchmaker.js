@@ -57,35 +57,9 @@ if (typeof argv.MatchmakerPort != 'undefined') {
 	config.MatchmakerPort = argv.MatchmakerPort;
 }
 
-// AWS Integration
-const WebSocket = require('ws');
-// Function to create websocket
-const sendWebsocketMessage= function (job, address, port) {
-	const wss = new WebSocket(config.WebSocketURL);
-	wss.onopen = function open() {
-		console.log('Connected to WebSocket');
-		wss.send(JSON.stringify({
-			action: "sendMessage",
-			job: job,
-			count: getCountCirrusServers(),
-			url: `${address}:${port}`
-		}));
-		console.log('Message sent')
-	};
-
-	wss.onclose = function close() {
-		console.log('Disconnected from WebSocket');
-	}
-
-	wss.onerror = function error(err) {
-		console.log('WebSocket error: ' + err);
-	}
-}
-
 http.listen(config.HttpPort, () => {
     console.log('HTTP listening on *:' + config.HttpPort);
 });
-
 
 if (config.UseHTTPS) {
 	//HTTPS certificate details
@@ -317,12 +291,6 @@ const matchmaker = net.createServer((connection) => {
 			if(cirrusServer) {
 				cirrusServer.ready = true;
 				console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} ready for use`);
-				sendWebsocketMessage(
-					"signallingServerReady",
-					cirrusServer.address, 
-					cirrusServer.port
-				);
-				console.log('Sent signallingServerReady after stream connected');
 			} else {
 				disconnect(connection);
 			}
@@ -332,12 +300,6 @@ const matchmaker = net.createServer((connection) => {
 			if(cirrusServer) {
 				cirrusServer.ready = false;
 				console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} no longer ready for use`);
-				sendWebsocketMessage(
-					"signallingServerDisconnect",
-					cirrusServer.address, 
-					cirrusServer.port
-				);
-				console.log('Sent signallingServerReady after stream disconnected');
 			} else {
 				disconnect(connection);
 			}
@@ -350,12 +312,6 @@ const matchmaker = net.createServer((connection) => {
 			} else {
 				disconnect(connection);
 			}
-			sendWebsocketMessage(
-				"signallingServerOccupied",
-				cirrusServer.address, 
-				cirrusServer.port
-			);
-			console.log('Sent signallingServerOccupied after client connected to server');
 		} else if (message.type === 'clientDisconnected') {
 			// A client disconnects from a Cirrus server.
 			cirrusServer = cirrusServers.get(connection);
@@ -369,12 +325,6 @@ const matchmaker = net.createServer((connection) => {
 			} else {				
 				disconnect(connection);
 			}
-			sendWebsocketMessage(
-				"signallingServerDisconnect",
-				cirrusServer.address, 
-				cirrusServer.port
-			);
-			console.log('Sent signallingServerDisconnect after client disconnected from server');
 		} else if (message.type === 'ping') {
 			cirrusServer = cirrusServers.get(connection);
 			if(cirrusServer) {
@@ -394,12 +344,6 @@ const matchmaker = net.createServer((connection) => {
 		if(cirrusServer) {
 			cirrusServers.delete(connection);
 			console.log(`Cirrus server ${cirrusServer.address}:${cirrusServer.port} disconnected from Matchmaker`);
-			sendWebsocketMessage(
-				"signallingServerDisconnect",
-				cirrusServer.address, 
-				cirrusServer.port
-			);
-			console.log('Sent signallingServerReady after client error disconnect');
 		} else {
 			console.log(`Disconnected machine that wasn't a registered cirrus server, remote address: ${connection.remoteAddress}`);
 		}
