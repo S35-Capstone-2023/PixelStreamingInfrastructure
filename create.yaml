@@ -342,6 +342,105 @@ Resources:
         Ref: "SignallingALBListener"
       Priority: 3
 
+  # HTTPSSignallingTG:
+  #   Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  #   Properties:
+  #     Name: "HTTPSSignallingTargetGroup01"
+  #     Port: 443
+  #     Protocol: "HTTPS"
+  #     VpcId:
+  #       Ref: "VPC"
+
+  # HTTPSSignallingTG2:
+  #   Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  #   Properties:
+  #     Name: "HTTPSSignallingTargetGroup02"
+  #     Port: 443
+  #     Protocol: "HTTPS"
+  #     VpcId:
+  #       Ref: "VPC"
+
+  # HTTPSSignallingT3:
+  #   Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  #   Properties:
+  #     Name: "HTTPSSignallingTargetGroup03"
+  #     Port: 443
+  #     Protocol: "HTTPS"
+  #     VpcId:
+  #       Ref: "VPC"
+
+  # HTTPSSignallingTG4:
+  #   Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  #   Properties:
+  #     Name: "HTTPSSignallingTargetGroup04"
+  #     Port: 443
+  #     Protocol: "HTTPS"
+  #     VpcId:
+  #       Ref: "VPC"
+
+  # HTTPSSignallingALBListener:
+  #   Type: AWS::ElasticLoadBalancingV2::Listener
+  #   Properties:
+  #     DefaultActions:
+  #       - TargetGroupArn:
+  #           Ref: "HTTPSSignallingTG"
+  #         Type: "forward"
+  #     LoadBalancerArn:
+  #       Ref: "SignallingServerALB"
+  #     Port: 443
+  #     Protocol: "HTTPS"
+
+  # HTTPSSignallingALBListenerRule:
+  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
+  #   Properties:
+  #     Actions:
+  #       - TargetGroupArn:
+  #           Ref: "HTTPSSignallingTG2"
+  #         Type: "forward"
+  #     Conditions:
+  #       - Field: "query-string"
+  #         QueryStringConfig:
+  #           Values:
+  #             - Key: "session"
+  #               Value: "02"
+  #     ListenerArn:
+  #       Ref: "HTTPSSignallingALBListener"
+  #     Priority: 1
+
+  # HTTPSSignallingALBListenerRule03:
+  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
+  #   Properties:
+  #     Actions:
+  #       - TargetGroupArn:
+  #           Ref: "HTTPSSignallingT3"
+  #         Type: "forward"
+  #     Conditions:
+  #       - Field: "query-string"
+  #         QueryStringConfig:
+  #           Values:
+  #             - Key: "session"
+  #               Value: "03"
+  #     ListenerArn:
+  #       Ref: "HTTPSSignallingALBListener"
+  #     Priority: 2
+
+  # HTTPSSignallingALBListenerRule04:
+  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
+  #   Properties:
+  #     Actions:
+  #       - TargetGroupArn:
+  #           Ref: "HTTPSSignallingTG4"
+  #         Type: "forward"
+  #     Conditions:
+  #       - Field: "query-string"
+  #         QueryStringConfig:
+  #           Values:
+  #             - Key: "session"
+  #               Value: "04"
+  #     ListenerArn:
+  #       Ref: "HTTPSSignallingALBListener"
+  #     Priority: 3
+
   MatchmakerALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -443,10 +542,11 @@ Resources:
         SecurityGroupIds:
           - !GetAtt MatchmakerInstanceSecurityGroup.GroupId
         UserData:
-          Fn::Base64: !Sub
-            - |
+          Fn::Base64: |
               #!/bin/bash
+              sudo su
               su ubuntu
+              cd home/ubuntu
               git clone -b UE5.3.3 https://github.com/S35-Capstone-2023/PixelStreamingInfrastructure.git
               cd ./PixelStreamingInfrastructure/Matchmaker
               ./platform_scripts/bash/run.sh
@@ -460,9 +560,7 @@ Resources:
       LaunchTemplateData:
         InstanceType: !Ref "SignallingInstanceType"
         IamInstanceProfile:
-          Arn: !GetAtt
-            - Ec2InstanceProfiles
-            - Arn
+          Arn: !GetAtt Ec2InstanceProfiles.Arn
         TagSpecifications:
           - ResourceType: "instance"
             Tags:
@@ -858,11 +956,18 @@ Resources:
                   print(resp.status)
                   if resp.status != 400:
                       print(resp.data)
+                      ip = json.loads(resp.data)["signallingServer"]
+                      print(backend_url + f"/get-signalling-server/{ip}")
+                      query_string_resp = http.request("GET", backend_url + f"/get-signalling-server/{ip}")
+                      print(query_string_resp.data)
+                      print(query_string_resp.status)
+                      query_string = json.loads(query_string_resp.data)["query_string"]
+                      print(query_string)
                       response = websocket_client.post_to_connection(
                           ConnectionId=connectionId,
                           Data=json.dumps({
                               "event": "signallingServerURL",
-                              "ip": json.loads(resp.data)["signallingServer"]
+                              "queryString": query_string
                           })
                       )
                       delete_connection(connectionId)
@@ -933,10 +1038,12 @@ Resources:
               
               userData='''#!/bin/bash
               sudo su
+              su ubuntu
+              cd home/ubuntu
               git clone -b UE5.3.3 https://github.com/S35-Capstone-2023/PixelStreamingInfrastructure.git
               aws s3 cp --recursive s3://capstone-storage-s35/Linux ./Linux
               chmod +x ./Linux/Capstone.sh
-              ./Linux/Capstone.sh -RenderOffScreen -AudioMixer -PixelStreamingIp=localhost -PixelStreamingPort=8888 & ./PixelStreamingInfrastructure/SignallingWebServer/platform_scripts/Start_WithTURN_SignallingServer.sh --UseMatchmaker true --MatchmakerAddress {}'''.format(matchMakerPrivateIP)
+              ./Linux/Capstone.sh -RenderOffScreen -AudioMixer -PixelStreamingIp=localhost -PixelStreamingPort=8888 & ./PixelStreamingInfrastructure/SignallingWebServer/platform_scripts/bash/Start_WithTURN_SignallingServer.sh --UseMatchmaker true --MatchmakerAddress {}'''.format(matchMakerPrivateIP)
               
               print(event)
               
@@ -969,6 +1076,150 @@ Resources:
       Handler: "index.lambda_handler"
       Runtime: "python3.10"
       Timeout: 900
+
+  RegisterInstanceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LambdaIAMRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import urllib3
+
+          backend_url = os.environ['BACKEND_URL']
+
+          def lambda_handler(event, context):
+              instanceId=event["detail"]["instance-id"]
+              ec2 = boto3.client('ec2')
+              elbClient = boto3.client('elbv2')
+              http = urllib3.PoolManager()
+              
+              response = ec2.describe_instances(InstanceIds=[instanceId],Filters=[{'Name': 'tag:type', 'Values': ['signalling']}])
+              if(len(response['Reservations'])==1):
+                  ## TODO implement limit check
+                  # the Signalling server ALB target group is updated with the instance id. The arn for the same is retrieved from the
+                  # dynamoDB table which has a mapping for the same
+                  signalling_servers = http.request("GET", backend_url + "/unreal/get-signalling-servers")
+                  print(signalling_servers.data)
+                  
+                  elbClient.register_targets(
+                      TargetGroupArn=response['Items'][0]['ARN'],
+                      Targets=[
+                        {
+                            'Id':instanceId ,
+                        },
+                      ]
+                  )
+                  
+                  http.request("POST", backend_url + "/unreal/add-signalling-server")
+                  
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps(response['Items'][0]['QueryString'])
+                      }
+              else :
+                  return {
+                          'statusCode': 400,
+                          'body': json.dumps('Instance not of type signalling ! skipped registration !')
+                      }
+      Description: "Register Signalling instance to a target group"
+      Environment:
+        Variables:
+          BACKEND_URL: !Ref "BackendURL"
+      FunctionName: "registerInstances"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 900
+
+  UploadToDDBFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt LambdaIAMRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          import urllib3
+
+          backend_url = os.environ['BACKEND_URL']
+          http = urllib3.PoolManager()
+
+          def lambda_handler(event, context):
+              # TODO implement
+              
+              client = boto3.client('elbv2')
+              
+              #get listener arn associated with the signalling load balancer
+              response = client.describe_load_balancers(
+                Names=[os.environ["ALBName"]]
+              )
+              loadbalancerarn=response['LoadBalancers'][0]['LoadBalancerArn']
+            
+              response = client.describe_listeners(
+                LoadBalancerArn=loadbalancerarn
+              )
+              listenerarn=response['Listeners'][0]['ListenerArn']
+              
+              response = client.describe_rules(
+                ListenerArn=listenerarn
+              )
+              
+              #iterate through the list of rules available in signalling load balancer listener and populate DDB
+              output = ''
+              for rule in response['Rules']:
+                  if rule['Priority']!='default':
+                      qs=rule['Conditions'][0]['QueryStringConfig']['Values'][0]['Key']+"="+rule['Conditions'][0]['QueryStringConfig']['Values'][0]['Value']
+                      # table.put_item(
+                          
+                      #     Item={
+                      #         'TargetGroup': 'TG'+rule['Conditions'][0]['QueryStringConfig']['Values'][0]['Value'],
+                      #         'ARN': rule['Actions'][0]['TargetGroupArn'],
+                      #         'InstanceID': '',
+                      #         'QueryString': qs
+                      #     }
+                      # )
+                      output = {
+                          "target_group_string": "TG"+rule['Conditions'][0]['QueryStringConfig']['Values'][0]['Value'],
+                          "arn": rule['Actions'][0]['TargetGroupArn'],
+                          "query_string": qs
+                      }
+                  else :
+                      # table.put_item(
+                      #     Item={
+                      #             'TargetGroup': 'TG01',
+                      #             'ARN': rule['Actions'][0]['TargetGroupArn'],
+                      #             'InstanceID': '',
+                      #             'QueryString': ''
+                      #         }
+                      # )
+                      output = {
+                          "target_group_string": "TG01",
+                          "arn": rule['Actions'][0]['TargetGroupArn'],
+                          "query_string": ""
+                      }
+                  print(output)
+                  resp = http.request(
+                      "POST", 
+                      backend_url + "/add-target-group",
+                      body = json.dumps(output)
+                  )
+                  print(resp.status)
+              
+              return {
+                  'statusCode': 200,
+                  'body': 'Populated dynamodb with required information !'
+              }
+      Description: "Uploads signalling server alb query string mapping to DynamoDB"
+      Environment:
+        Variables:
+          BACKEND_URL: !Ref "BackendURL"
+          ALBName: !GetAtt SignallingServerALB.LoadBalancerName
+      FunctionName: "uploadToDDB"
+      Handler: "index.lambda_handler"
+      Runtime: "python3.10"
+      Timeout: 30
 
   ClientConnectPermission:
     Type: "AWS::Lambda::Permission"
