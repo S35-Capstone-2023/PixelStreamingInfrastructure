@@ -179,7 +179,7 @@ if(enableRESTAPI) {
 		cirrusServer = getAvailableCirrusServer();
 		if (cirrusServer != undefined) {
 			res.json({ 
-				signallingServer: `${cirrusServer.address}:${cirrusServer.port}`
+				signallingServer: cirrusServer.address
 			});
 			console.log(`Returning ${cirrusServer.address}:${cirrusServer.port}`);
 		} else {
