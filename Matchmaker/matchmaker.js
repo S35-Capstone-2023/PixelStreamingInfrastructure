@@ -161,7 +161,7 @@ function getCountCirrusServers() {
 	for (let cirrusServer of cirrusServers.values()) {
 		console.log(cirrusServer.address)
 		console.log(cirrusServer.port)
-		if (cirrusServer.numConnectedClients === 0 && cirrusServer.ready === true) {
+		if (cirrusServer.numConnectedClients === 0 && cirrusServer.ready != true) {
 			if( cirrusServer.hasOwnProperty('lastRedirect')) {
 				if( ((Date.now() - cirrusServer.lastRedirect) / 1000) < timeSinceRedirect )
 					continue;
